@@ -5,7 +5,10 @@
 #   3. Gazebo plugins -> gazebo/plugins/build
 # Needs: Unreal Engine 5.8.2 (UE_ROOT), docker with px4io/px4-dev-simulation-focal, git, wget, unzip.
 #   UE_ROOT=/path/to/Linux_Unreal_Engine_5.8.2 ./setup_deps.sh
+#   ./setup_deps.sh --gazebo-only    only 2 and 3 (no Unreal Engine; use the packaged build)
 set -e
+GAZEBO_ONLY=0
+[ "$1" = "--gazebo-only" ] && GAZEBO_ONLY=1
 HERE="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 UE_ROOT="${UE_ROOT:-$HOME/Downloads/Linux_Unreal_Engine_5.8.2}"
 DEPS_DIR="${DEPS_DIR:-$HOME/Documents/InhouseSim-deps}"
@@ -14,7 +17,10 @@ COSYS="${DEPS_DIR}/cosys-airsim-3.5.0"
 COSYS_GCC="${DEPS_DIR}/cosys-airsim-3.5.0-gcc"
 PX4_DEV_IMAGE=px4io/px4-dev-simulation-focal:latest
 
-[ -x "${UE_ROOT}/Engine/Binaries/Linux/UnrealEditor" ] || { echo "UE_ROOT=${UE_ROOT} is not an Unreal Engine install"; exit 1; }
+if [ ${GAZEBO_ONLY} = 0 ] && [ ! -x "${UE_ROOT}/Engine/Binaries/Linux/UnrealEditor" ]; then
+    echo "UE_ROOT=${UE_ROOT} is not an Unreal Engine install (use --gazebo-only with the packaged build)"
+    exit 1
+fi
 
 # Cosys-AirSim source at the release tag, with our patches
 if [ ! -d "${COSYS}" ]; then
@@ -42,9 +48,11 @@ if [ ! -d AirLib/deps/eigen3 ]; then
 fi
 
 # 1. Unreal plugin (UE's clang + sysroot so the static libs link into the engine)
-./build.sh --ue-root "${UE_ROOT}"
-COSYS_ROOT="${COSYS}" "${HERE}/CTrackSim/update_plugin.sh"
-UE_ROOT="${UE_ROOT}" "${HERE}/CTrackSim/build_editor.sh"
+if [ ${GAZEBO_ONLY} = 0 ]; then
+    ./build.sh --ue-root "${UE_ROOT}"
+    COSYS_ROOT="${COSYS}" "${HERE}/CTrackSim/update_plugin.sh"
+    UE_ROOT="${UE_ROOT}" "${HERE}/CTrackSim/build_editor.sh"
+fi
 
 # 2. GazeboDrone (gcc AirLib, links against Gazebo 11 in the PX4 dev image)
 rsync -a --delete --exclude build_release --exclude build_debug --exclude 'Unreal/Environments' \
@@ -61,4 +69,4 @@ cp "${COSYS_GCC}/GazeboDrone/build/GazeboDrone" "${HERE}/gazebo/bin/GazeboDrone"
 docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "${HERE}/gazebo/plugins":/src -w /src --entrypoint bash ${PX4_DEV_IMAGE} -c '
     mkdir -p build && cd build && cmake .. && make -j"$(nproc)"'
 
-echo "Done. Next: the base map is in the repo; run ./run_unreal.sh and ./gazebo/run_gazebo_px4.sh"
+echo "Done. Next: ./run_unreal.sh and ./gazebo/run_gazebo_px4.sh"
