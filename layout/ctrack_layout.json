@@ -1,0 +1,82 @@
+{
+  "_doc": [
+    "C-Track test field layout: single source for the Unreal map and the Gazebo world.",
+    "Track frame (meters): origin = Start helipad, +X along the 100 m side (left->right in the",
+    "layout drawing), +Y toward the C lane (downward in the drawing), +Z up. Positions are the",
+    "footprint center at ground level; size = [X, Y, Z] extent; yaw_deg about +Z.",
+    "Unreal: same axes (cm). Gazebo (ENU): x = X, y = -Y, z = Z (GazeboDrone sends (x,-y,-z) to AirSim NED).",
+    "Values marked in 'assumed' are not in the test design and should be replaced with measured ones."
+  ],
+  "field": {"x_range": [-5.0, 95.0], "y_range": [-12.0, 38.0]},
+
+  "waypoints": {
+    "START": [0.0, 0.0],
+    "WP1": [60.0, 0.0],
+    "WP2": [79.0, 0.0],
+    "WP3": [79.0, 26.0],
+    "WP4": [62.0, 26.0],
+    "WP5": [42.0, 26.0],
+    "WP6": [26.0, 23.0],
+    "GOAL": [0.0, 26.0]
+  },
+
+  "obstacles": [
+    {"name": "Tent_A1", "zone": "A", "shape": "box", "pos": [15.0, -1.0], "size": [3.0, 6.0, 2.5], "yaw_deg": 0, "color": "orange"},
+    {"name": "Tent_A2", "zone": "A", "shape": "box", "pos": [35.0, 1.0], "size": [3.0, 6.0, 2.5], "yaw_deg": 0, "color": "orange"},
+
+    {"name": "Balloon_C", "zone": "C", "shape": "cylinder", "pos": [19.5, 21.5], "size": [0.6, 0.6, 2.0], "yaw_deg": 0, "color": "yellow"},
+    {"name": "WoodWall_C", "zone": "C", "shape": "box", "pos": [30.0, 26.0], "size": [0.3, 2.4, 3.0], "yaw_deg": 0, "color": "brown"},
+
+    {"name": "Pole_C1", "zone": "C", "shape": "cylinder", "pos": [66.0, 26.0], "size": [0.5, 0.5, 2.0], "yaw_deg": 0, "color": "orange"},
+    {"name": "Pole_C2", "zone": "C", "shape": "cylinder", "pos": [56.0, 23.0], "size": [0.5, 0.5, 2.0], "yaw_deg": 0, "color": "orange"},
+    {"name": "Pole_C3", "zone": "C", "shape": "cylinder", "pos": [56.0, 29.0], "size": [0.5, 0.5, 2.0], "yaw_deg": 0, "color": "orange"},
+    {"name": "Pole_C4", "zone": "C", "shape": "cylinder", "pos": [46.0, 20.0], "size": [0.5, 0.5, 2.0], "yaw_deg": 0, "color": "orange"},
+    {"name": "Pole_C5", "zone": "C", "shape": "cylinder", "pos": [46.0, 26.0], "size": [0.5, 0.5, 2.0], "yaw_deg": 0, "color": "orange"},
+    {"name": "Pole_C6", "zone": "C", "shape": "cylinder", "pos": [46.0, 32.0], "size": [0.5, 0.5, 2.0], "yaw_deg": 0, "color": "orange"}
+  ],
+
+  "moving_obstacles": [
+    {
+      "name": "RCCart_C",
+      "zone": "C",
+      "start": [39.0, 33.0],
+      "end": [39.0, 18.5],
+      "speed_mps": 1.0,
+      "loop": true,
+      "trigger_model": "x8",
+      "trigger_distance": 15.0,
+      "trigger_point": [39.0, 26.0],
+      "parts": [
+        {"name": "Body", "shape": "box", "offset": [0.0, 0.0, 0.0], "size": [0.6, 0.4, 0.3], "color": "blue"},
+        {"name": "Panel", "shape": "box", "offset": [0.0, 0.0, 0.3], "size": [0.02, 1.2, 1.8], "color": "brown"}
+      ]
+    }
+  ],
+
+  "wind_zones": [
+    {
+      "name": "Wind_B",
+      "zone": "B",
+      "x_range": [69.0, 89.0],
+      "y_range": [3.0, 23.0],
+      "z_range": [0.0, 10.0],
+      "direction": [-1.0, 0.0, 0.0],
+      "speed_mps": 3.0,
+      "cd_area": 0.1,
+      "vehicle_model": "x8",
+      "fans": [[84.0, 6.0], [84.0, 13.0], [84.0, 20.0]],
+      "fan_size": [0.5, 1.0, 1.5]
+    }
+  ],
+
+  "assumed": [
+    "Tent footprint orientation (6 m side along Y) and centers, read from the drawing",
+    "Pole diameter 0.5 m (2026-10-12; 0.1 m was below the AirSim lidar spacing of 1.875 deg beyond ~3 m - the policy saw C1 only within ~7 m; backup/ctrack_layout.20261012_before_poles05.json)",
+    "Balloon figure modeled as a 0.6 m diameter cylinder",
+    "Wood wall: 3 m read as height; width 2.4 m and thickness 0.3 m",
+    "RC cart body 0.6x0.4x0.3 m, plywood panel 1.2 m wide x 1.8 m high, speed 1.0 m/s, travel Y 33 -> 18.5 m",
+    "RC cart starts when the vehicle is within 15 m of the crossing point (39, 26), then shuttles back and forth",
+    "Wind zone B: 3.0 m/s toward -X, height 0-10 m; vehicle drag CdA 0.1 m^2; fan visual size",
+    "Pole field changed 2026-10-10 to rows of 1-2-3 poles (X 66 / 56 / 46, 6 m apart across) so the X8 (prop tips 0.77 m) can weave through at 3-5 m/s; the drawing's 2+1+2 field 5 m apart was too tight (original: backup/ctrack_layout.20261010_before_123poles.json)"
+  ]
+}

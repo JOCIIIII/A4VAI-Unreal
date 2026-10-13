@@ -1,0 +1,58 @@
+diff --git a/Unreal/Plugins/AirSim/Source/UnrealSensors/UnrealLidarSensor.cpp b/Unreal/Plugins/AirSim/Source/UnrealSensors/UnrealLidarSensor.cpp
+index 063606b..da9fa72 100755
+--- a/Unreal/Plugins/AirSim/Source/UnrealSensors/UnrealLidarSensor.cpp
++++ b/Unreal/Plugins/AirSim/Source/UnrealSensors/UnrealLidarSensor.cpp
+@@ -5,6 +5,7 @@
+ #include "AirBlueprintLib.h"
+ #include "common/Common.hpp"
+ #include "Async/ParallelFor.h"
++#include "Async/Async.h"
+ #include "NedTransform.h"
+ #include "DrawDebugHelpers.h"
+ #include "Engine/Engine.h"
+@@ -189,7 +190,7 @@ bool UnrealLidarSensor::getPointCloud(const msr::airlib::Pose& lidar_pose, const
+ 		ParallelFor(number_of_lasers, [&](uint32 laser) {
+ 			float vertical_angle = laser_angles_[laser];
+ 			uint32 current_point_index = number_of_lasers * current_horizontal_angle_index_ + laser;
+-			uint32 draw_index = number_of_lasers * i + laser;
++			uint32 draw_index = number_of_lasers * (i - 1) + laser;   // i counts from 1: (i - 1) stays inside point_cloud_draw_
+ 			Vector3r point;
+ 			FVector draw_point;
+ 			std::string label;
+@@ -212,17 +213,27 @@ bool UnrealLidarSensor::getPointCloud(const msr::airlib::Pose& lidar_pose, const
+ 	}
+ 
+ 	if (sensor_params_.draw_debug_points) {
+-		for (uint32 j = 0; j < point_cloud_draw_.size(); j++)
++		// Drawn on the game thread: this runs on AirSim's physics thread (World::worldUpdatorAsync),
++		// and a line batcher marked dirty from there while the game thread sends its end-of-frame
++		// updates trips UE 5.8's check(!bPostTickComponentUpdate) (LevelTick.cpp) - it crashed
++		// CTrackSim in flight. Only hits: misses stay FVector() and were drawn at the world origin.
++		// Each call scans a slice of the sweep; one rotation's lifetime keeps the whole sweep shown.
++		TArray<FVector> hits;
++		hits.Reserve(point_cloud_draw_.size());
++		for (const FVector& p : point_cloud_draw_)
+ 		{
+-			UAirBlueprintLib::DrawPoint(
+-				actor_->GetWorld(),
+-				point_cloud_draw_[j],
+-				5,                       //size
+-				FColor::Green,
+-				false,                    //persistent (never goes away)
+-				(1 / (sensor_params_.horizontal_rotation_frequency * 2))                //point leaves a trail on moving object
+-			);
++			if (!p.IsZero())
++				hits.Add(p);
+ 		}
++		TWeakObjectPtr<UWorld> world(actor_->GetWorld());
++		const float life = 1.05f / sensor_params_.horizontal_rotation_frequency;
++		AsyncTask(ENamedThreads::GameThread, [world, hits = MoveTemp(hits), life]() {
++			if (UWorld* w = world.Get())
++			{
++				for (const FVector& p : hits)
++					UAirBlueprintLib::DrawPoint(w, p, 5, FColor::Green, false, life);
++			}
++		});
+ 	}
+ 	return refresh;
+ }

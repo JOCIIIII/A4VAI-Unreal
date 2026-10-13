@@ -1,0 +1,43 @@
+{
+  "SeeDocsAt": "https://cosys-lab.github.io/Cosys-AirSim/settings/",
+  "SettingsVersion": 2.0,
+  "SimMode": "Multirotor",
+  "RecordUIVisible": false,
+  "Vehicles": {
+    "SimpleFlight": {
+      "VehicleType": "SimpleFlight",
+      "AutoCreate": true,
+      "X": 0.0,
+      "Y": 0.0,
+      "Z": -1.0,
+      "Sensors": {
+        "Imu": {
+          "SensorType": 2,
+          "Enabled": true
+        },
+        "RPLIDAR_A3": {
+          "SensorType": 6,
+          "Enabled": true,
+          "NumberOfChannels": 32,
+          "RotationsPerSecond": 10,
+          "MeasurementsPerCycle": 192,
+          "UpdateFrequency": 10,
+          "Range": 40,
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": -0.3,
+          "Roll": 0.0,
+          "Pitch": 0.0,
+          "Yaw": 0.0,
+          "VerticalFOVUpper": 52,
+          "VerticalFOVLower": -7,
+          "HorizontalFOVStart": 0,
+          "HorizontalFOVEnd": 360,
+          "DrawDebugPoints": false,
+          "DataFrame": "SensorLocalFrame",
+          "ExternalController": false
+        }
+      }
+    }
+  }
+}
