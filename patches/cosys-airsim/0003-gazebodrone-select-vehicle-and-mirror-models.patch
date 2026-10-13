@@ -1,0 +1,69 @@
+--- a/GazeboDrone/src/main.cpp
++++ b/GazeboDrone/src/main.cpp
+@@ -33,6 +33,11 @@
+ #include <chrono>
+ 
+ #include <iostream>
++#include <cstdlib>
++#include <map>
++#include <set>
++#include <sstream>
++#include <string>
+ 
+ constexpr int NWIDTH = 7;
+ static constexpr int MESSAGE_THROTTLE = 100;
+@@ -41,6 +46,16 @@
+ 
+ msr::airlib::MultirotorRpcLibClient client;
+ 
++// Gazebo model that drives the AirSim vehicle (env GAZEBO_DRONE_MODEL). Empty: first pose, as upstream.
++// Needed when the world has other non-static models (e.g. a moving obstacle) that can come first.
++static std::string drone_model;
++
++// Other Gazebo models mirrored to Unreal actors of the same name (env GAZEBO_MIRROR_MODELS,
++// comma separated), e.g. moving obstacles driven by a Gazebo plugin. Throttled per model.
++static std::set<std::string> mirror_models;
++static std::map<std::string, std::chrono::steady_clock::time_point> mirror_last;
++static constexpr auto MIRROR_PERIOD = std::chrono::milliseconds(20);
++
+ void cbLocalPose(ConstPosesStampedPtr& msg)
+ {
+     std::cout << std::fixed;
+@@ -67,12 +82,21 @@
+             std::cout << " oz: " << std::right << std::setw(NWIDTH) << oz;
+             std::cout << std::endl;
+         }
+-        if (i == 0) {
++        if (drone_model.empty() ? i == 0 : msg->pose(i).name() == drone_model) {
+             msr::airlib::Vector3r p(x, -y, -z);
+             msr::airlib::Quaternionr o(ow, ox, -oy, -oz);
+ 
+             client.simSetVehiclePose(Pose(p, o), true);
+         }
++        else if (mirror_models.count(msg->pose(i).name())) {
++            const auto now = std::chrono::steady_clock::now();
++            auto& last = mirror_last[msg->pose(i).name()];
++            if (now - last >= MIRROR_PERIOD) {
++                last = now;
++                client.simSetObjectPose(msg->pose(i).name(),
++                                        Pose(msr::airlib::Vector3r(x, -y, -z), msr::airlib::Quaternionr(ow, ox, -oy, -oz)), true);
++            }
++        }
+     }
+     if (count % MESSAGE_THROTTLE == 0) {
+         std::cout << std::endl;
+@@ -110,6 +134,14 @@
+ 
+ int main(int _argc, char** _argv)
+ {
++    if (const char* m = std::getenv("GAZEBO_DRONE_MODEL"))
++        drone_model = m;
++    if (const char* m = std::getenv("GAZEBO_MIRROR_MODELS")) {
++        std::stringstream ss(m);
++        for (std::string name; std::getline(ss, name, ',');)
++            if (!name.empty())
++                mirror_models.insert(name);
++    }
+ 
+     client.confirmConnection();
+ 

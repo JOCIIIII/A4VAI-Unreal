@@ -1,0 +1,68 @@
+diff --git a/Unreal/Plugins/AirSim/Source/AirSimCameraDirector.cpp b/Unreal/Plugins/AirSim/Source/AirSimCameraDirector.cpp
+index 17f0b8c..bf9f9bb 100644
+--- a/Unreal/Plugins/AirSim/Source/AirSimCameraDirector.cpp
++++ b/Unreal/Plugins/AirSim/Source/AirSimCameraDirector.cpp
+@@ -1,6 +1,7 @@
+ #include "AirSimCameraDirector.h"
+ #include "GameFramework/PlayerController.h"
+ #include "AirBlueprintLib.h"
++#include "Kismet/KismetMathLibrary.h"
+ 
+ AAirSimCameraDirector::AAirSimCameraDirector()
+ {
+@@ -38,6 +39,20 @@ void AAirSimCameraDirector::Tick(float DeltaTime)
+     else if (mode_ == ECameraDirectorMode::CAMERA_DIRECTOR_MODE_NODISPLAY) {
+         //do nothing, we have camera turned off
+     }
++    else if (mode_ == ECameraDirectorMode::CAMERA_DIRECTOR_MODE_FLY_WITH_ME && follow_actor_) {
++        //chase: stay behind the vehicle along its heading (yaw only, no roll/pitch shake) and look a
++        //little ahead of it, so what it is flying into stays in view. (The stock offset is fixed in
++        //world axes - flying the other way the camera ended up in front, looking back.)
++        const float alpha = 1.0f - FMath::Exp(-DeltaTime / 0.3f);
++        const FVector location = FMath::Lerp(ExternalCamera->GetActorLocation(),
++                                             follow_actor_->GetActorLocation() + getChaseOffset(), alpha);
++        ExternalCamera->SetActorLocation(location);
++        const FRotator heading(0.0f, follow_actor_->GetActorRotation().Yaw, 0.0f);
++        const FVector aim = follow_actor_->GetActorLocation() + heading.RotateVector(FVector(300.0f, 0.0f, 0.0f));
++        ExternalCamera->SetActorRotation(FMath::RInterpTo(ExternalCamera->GetActorRotation(),
++                                                          UKismetMathLibrary::FindLookAtRotation(location, aim),
++                                                          DeltaTime, 8.0f));
++    }
+     else { //make camera move in desired way
+         UAirBlueprintLib::FollowActor(ExternalCamera, follow_actor_, initial_ground_obs_offset_, ext_obs_fixed_z_);
+     }
+@@ -309,6 +324,13 @@ void AAirSimCameraDirector::inputEventFrontView()
+     notifyViewModeChanged();
+ }
+ 
++FVector AAirSimCameraDirector::getChaseOffset() const
++{
++    //behind and above the vehicle in its heading frame: |FollowDistance| (at least 4 m) back, 0.4 x that up
++    const float back_cm = FMath::Max(4.0f, FMath::Abs(static_cast<float>(follow_distance_))) * 100.0f;
++    return FRotator(0.0f, follow_actor_->GetActorRotation().Yaw, 0.0f).RotateVector(FVector(-back_cm, 0.0f, 0.4f * back_cm));
++}
++
+ void AAirSimCameraDirector::inputEventFlyWithView()
+ {
+     if (ExternalCamera) {
+@@ -317,7 +339,7 @@ void AAirSimCameraDirector::inputEventFlyWithView()
+ 
+         if (follow_actor_)
+             ExternalCamera->SetActorLocationAndRotation(
+-                follow_actor_->GetActorLocation() + initial_ground_obs_offset_, camera_start_rotation_);
++                follow_actor_->GetActorLocation() + getChaseOffset(), camera_start_rotation_);
+         disableCameras(true, true, true);
+         ext_obs_fixed_z_ = false;
+     }
+diff --git a/Unreal/Plugins/AirSim/Source/AirSimCameraDirector.h b/Unreal/Plugins/AirSim/Source/AirSimCameraDirector.h
+index 93690f8..a06a7db 100644
+--- a/Unreal/Plugins/AirSim/Source/AirSimCameraDirector.h
++++ b/Unreal/Plugins/AirSim/Source/AirSimCameraDirector.h
+@@ -40,6 +40,7 @@ public:
+     void inputEventGroundView();
+     void inputEventManualView();
+     void inputEventFlyWithView();
++    FVector getChaseOffset() const;
+     void inputEventSpringArmChaseView();
+     void inputEventBackupView();
+     void inputEventNoDisplayView();
