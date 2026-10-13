@@ -25,16 +25,28 @@ patches/cosys-airsim/            our changes to Cosys-AirSim 5.8-v3.5.0 (applied
 settings/                        AirSim settings (see below)
 tools/fly_ctrack_check.py        offboard flight over the route with consistency checks
 setup_deps.sh                    builds the plugin, GazeboDrone and the Gazebo plugins
+package.sh                       builds the release assets (packaged Unreal build, Gazebo binaries)
 ```
 
 ## Requirements
 - Ubuntu 22.04 (tested) with an NVIDIA GPU (Vulkan)
-- [Unreal Engine 5.8.2 for Linux](https://www.unrealengine.com/linux) (Epic account; not redistributable)
+- [Unreal Engine 5.8.2 for Linux](https://www.unrealengine.com/linux) (Epic account; not
+  redistributable) - only for the editor project; the release build runs without it
 - Docker with `px4io/px4-dev-simulation-focal`
 - PX4-Autopilot v1.16 built for SITL with the gazebo-classic `x8` airframe (2000), laid out as
   `$PX4_WS/PX4-Autopilot/build/px4_sitl_default` (default `PX4_WS=~/Documents/A4VAI-SITL/PX4-Autopilot`)
 
-## Setup
+## Setup without Unreal Engine (release build)
+Download from the GitHub release and extract in the repository root:
+```bash
+mkdir -p packaged && tar -xzf CTrackSim-Linux.tar.gz -C packaged   # packaged/CTrackSim-Linux/
+tar -xzf ctrack-gazebo-prebuilt.tar.gz                              # gazebo/bin, gazebo/plugins/build
+```
+`run_unreal.sh` then runs the packaged build (or set `CTRACK_PACKAGED=/path/to/CTrackSim-Linux`).
+It uses Cosys-AirSim's default vehicle pawn. Instead of the prebuilt Gazebo binaries you can build
+them without Unreal Engine: `./setup_deps.sh --gazebo-only`.
+
+## Setup with Unreal Engine (editor project)
 ```bash
 UE_ROOT=/path/to/Linux_Unreal_Engine_5.8.2 ./setup_deps.sh
 ```
@@ -42,6 +54,7 @@ Clones Cosys-AirSim `5.8-v3.5.0` into `~/Documents/InhouseSim-deps` (`DEPS_DIR`)
 `patches/cosys-airsim`, builds AirLib with Unreal's bundled clang into `CTrackSim/Plugins/AirSim`
 and the editor target, builds AirLib with gcc + GazeboDrone in the PX4 dev image
 (`gazebo/bin/GazeboDrone`), and the Gazebo plugins (`gazebo/plugins/build`).
+`./package.sh` builds the release assets from a clean clone (see the script).
 
 ## Run
 ```bash
@@ -65,7 +78,7 @@ Settings (all: `RPLIDAR_A3` CPU lidar, 32 channels, 10 Hz, vertical FOV -7..52 d
 ## Vehicle look (S900) - not included
 The Gazebo settings use an S900 octocopter look built by `CTrackSim/Scripts/make_s900_pawn.py`
 from a 3D model that may not be redistributed, so the model and its imported assets are not in
-this repository. Without them `run_unreal.sh` drops the pawn override and Cosys-AirSim uses its
+this repository or the release build. Without them `run_unreal.sh` drops the pawn override and Cosys-AirSim uses its
 default multirotor pawn; physics, sensors and poses are unchanged (only the look differs).
 Note for the S900 pawn: its mesh has no collision, since the Cosys 3.5 lidar does not skip its own
 vehicle and the -7 deg beams would hit the prop tips.

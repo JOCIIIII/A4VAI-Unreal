@@ -27,3 +27,6 @@ backup/
 
 __pycache__/
 *.pyc
+
+# Packaged Unreal build (release asset)
+packaged/
