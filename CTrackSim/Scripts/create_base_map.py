@@ -1,4 +1,4 @@
-"""Create the empty C-Track base map (/Game/CTrack/Maps/CTrack).
+"""Create an empty base map: CTRACK_MAP (default /Game/CTrack/Maps/Yard; C-Track: /Game/CTrack/Maps/CTrack).
 
 Frame: Unreal world origin = Start helipad (H). +X along the 100 m track direction
 (left->right in the layout drawing), +Y toward the C (collision avoidance) lane, +Z up.
@@ -8,9 +8,11 @@ Obstacles are added later from the shared obstacle definition (Unreal + Gazebo).
 Run headless:
   UnrealEditor-Cmd CTrackSim.uproject -run=pythonscript -script=Scripts/create_base_map.py -nullrhi -unattended
 """
+import os
+
 import unreal
 
-MAP_PATH = "/Game/CTrack/Maps/CTrack"
+MAP_PATH = os.environ.get("CTRACK_MAP", "/Game/CTrack/Maps/Yard")
 M = 100.0  # Unreal units (cm) per meter
 
 FIELD_X = (-5.0, 95.0)
