@@ -1,8 +1,10 @@
 #!/bin/bash
 # Launch the C-Track map with Cosys-AirSim driven by Gazebo (ExternalPhysicsEngine).
 #   ./run_unreal.sh [settings.json]   (default: settings/settings_gazebo.json)
+#   MAP=/Game/CTrack/Maps/CTrack ./run_unreal.sh   the C-Track field instead of the yard
 HERE="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 UE_ROOT="${UE_ROOT:-$HOME/Downloads/Linux_Unreal_Engine_5.8.2}"
+MAP="${MAP:-/Game/CTrack/Maps/Yard}"   # default: SLAM yard; MAP=/Game/CTrack/Maps/CTrack for C-Track
 SETTINGS="$(readlink -f "${1:-${HERE}/settings/settings_gazebo.json}")"
 
 # The S900 vehicle look is not in the public repository. Without it, drop the pawn override
@@ -21,5 +23,5 @@ EOF
     SETTINGS="${FALLBACK}"
 fi
 
-exec "${UE_ROOT}/Engine/Binaries/Linux/UnrealEditor" "${HERE}/CTrackSim/CTrackSim.uproject" /Game/CTrack/Maps/CTrack \
+exec "${UE_ROOT}/Engine/Binaries/Linux/UnrealEditor" "${HERE}/CTrackSim/CTrackSim.uproject" "${MAP}" \
     -game -windowed -ResX=1280 -ResY=720 -settings="${SETTINGS}"
