@@ -102,7 +102,8 @@ pattern file cannot be loaded the sensor falls back to the rotating grid (frames
 Pattern file format: `"MID360PT"`, u32 version 1, u32 n_points, f32 points_per_second, u32 n_lasers,
 then n_points x (f32 azimuth_deg, f32 elevation_deg), little endian, Livox frame (x forward, y left,
 z up). `tools/check_mid360_pattern.py` checks a running sim against the file. The Cosys ROS2 bridge
-publishes the NaN points as they are but marks the PointCloud2 `is_dense: true`.
+keeps the order and the NaN points, converts to x forward, y left, z up (negates y and z), stamps
+the PointCloud2 with `time_stamp` and marks it `is_dense: true` regardless.
 
 ## Vehicle look (S900) - not included
 The Gazebo settings use an S900 octocopter look built by `CTrackSim/Scripts/make_s900_pawn.py`
