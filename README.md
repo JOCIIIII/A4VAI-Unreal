@@ -210,8 +210,10 @@ The Gazebo world is regenerated on every `run_gazebo_px4.sh`.
   a lock and copied outside it. Changes AirLib headers: rebuild AirLib (`setup_deps.sh`).
 
 ## Known issues
-- After Unreal has run for hours, GazeboDrone sometimes connects but never receives a pose
-  (lidar keeps publishing from the spawn point). Restarting Unreal fixes it; cause unknown.
+- GazeboDrone sometimes connected to AirSim but never received a Gazebo pose (lidar kept publishing
+  from the spawn point). Gazebo transport advertised whichever external interface was up when each
+  process started (LAN or Wi-Fi addresses seen); the container now pins it to `GAZEBO_IP=127.0.0.1`,
+  and GazeboDrone is restarted if it prints no pose within 30 s.
 
 ## License
 MIT (`LICENSE`), which also covers the patches in `patches/`. Cosys-AirSim is MIT licensed
