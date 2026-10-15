@@ -1,0 +1,245 @@
+--- a/Unreal/Plugins/AirSim/Source/UnrealSensors/UnrealLidarSensor.h
++++ b/Unreal/Plugins/AirSim/Source/UnrealSensors/UnrealLidarSensor.h
+@@ -36,6 +36,9 @@
+     using VectorMath = msr::airlib::VectorMath;
+ 
+     void createLasers();
++    bool loadPattern(const std::string& pattern_file);
++    bool getPatternPointCloud(const msr::airlib::Pose& lidar_pose, const msr::airlib::Pose& vehicle_pose,
++        msr::airlib::TTimeDelta delta_time, msr::airlib::vector<msr::airlib::real_T>& point_cloud, msr::airlib::vector<std::string>& groundtruth, msr::airlib::vector<msr::airlib::real_T>& point_cloud_final, msr::airlib::vector<std::string>& groundtruth_final);
+     bool shootLaser(const msr::airlib::Pose& lidar_pose, const msr::airlib::Pose& vehicle_pose,
+         const uint32 channel, const float horizontal_angle, const float vertical_angle, 
+         const msr::airlib::LidarSimpleParams params, Vector3r &point, std::string &label, FVector& raw_point);
+@@ -55,4 +58,15 @@
+     msr::airlib::Pose sensor_reference_frame_;
+     const float draw_time_;
+     const bool external_;
++
++    // Scan pattern mode (setting "PatternFile"): shoot a recorded shot sequence, e.g. a Livox Mid-360.
++    bool pattern_mode_ = false;
++    std::vector<Vector3r> pattern_dirs_;   // unit rays in the sensor frame (x forward, y right, z down)
++    double pattern_file_pps_ = 0;          // shots per second the pattern was recorded at
++    double pattern_pps_ = 0;               // shots per second fired ("PatternPointsPerSecond")
++    double pattern_index_ = 0;             // next shot in the pattern (fractional when decimating)
++    double shot_carry_ = 0;                // fraction of a shot owed to the next tick
++    double frame_elapsed_ = 0;             // seconds accumulated in the frame being built
++    double frame_period_ = 0.1;            // 1 / "PatternFrameRate"
++    float min_range_ = 0;                  // "MinRange" [m]: closer hits are reported as misses
+ };
+\ No newline at end of file
+--- a/Unreal/Plugins/AirSim/Source/UnrealSensors/UnrealLidarSensor.cpp
++++ b/Unreal/Plugins/AirSim/Source/UnrealSensors/UnrealLidarSensor.cpp
+@@ -9,6 +9,9 @@
+ #include "NedTransform.h"
+ #include "DrawDebugHelpers.h"
+ #include "Engine/Engine.h"
++#include "Misc/FileHelper.h"
++#include "Misc/Paths.h"
++#include <limits>
+ #include <random>
+ 
+ // ctor
+@@ -25,6 +28,76 @@
+ 	dist_ = std::normal_distribution<float>(0, getParams().min_noise_standard_deviation);
+ 	point_cloud_draw_.clear();
+ 	createLasers();
++
++	const std::string pattern_file = setting.settings.getString("PatternFile", "");
++	if (!pattern_file.empty()) {
++		if (loadPattern(pattern_file)) {
++			pattern_mode_ = true;
++			// at most the recorded rate: faster would fire the same shot twice
++			const float pps = setting.settings.getFloat("PatternPointsPerSecond", 0);
++			pattern_pps_ = pps > 0 ? FMath::Min(double(pps), pattern_file_pps_) : pattern_file_pps_;
++			const float frame_rate = setting.settings.getFloat("PatternFrameRate", 10);
++			frame_period_ = frame_rate > 0 ? 1.0 / frame_rate : 0.1;
++			min_range_ = setting.settings.getFloat("MinRange", 0);
++			UE_LOG(LogTemp, Display, TEXT("Lidar %s: pattern mode, %d shots at %.0f/s fired at %.0f/s, %.1f Hz frames"),
++				UTF8_TO_TCHAR(setting.sensor_name.c_str()), (int)pattern_dirs_.size(), pattern_file_pps_, pattern_pps_, 1.0 / frame_period_);
++		}
++		else {
++			UAirBlueprintLib::LogMessageString("Lidar: cannot load PatternFile ", pattern_file, LogDebugLevel::Failure);
++		}
++	}
++}
++
++// Loads a scan pattern: "MID360PT", u32 version 1, u32 n_points, f32 points_per_second, u32 n_lasers,
++// then n_points x (f32 azimuth_deg, f32 elevation_deg) in emission order, little endian, in the Livox
++// sensor frame (x forward, y left, z up; azimuth positive to the left, elevation positive up).
++// A relative path is looked up in the project's Content and project directories.
++bool UnrealLidarSensor::loadPattern(const std::string& pattern_file)
++{
++	const FString file(UTF8_TO_TCHAR(pattern_file.c_str()));
++	TArray<FString> candidates;
++	if (FPaths::IsRelative(file)) {
++		candidates.Add(FPaths::Combine(FPaths::ProjectContentDir(), file));
++		candidates.Add(FPaths::Combine(FPaths::ProjectDir(), file));
++	}
++	candidates.Add(file);
++
++	TArray<uint8> data;
++	FString used;
++	for (const FString& c : candidates) {
++		if (FFileHelper::LoadFileToArray(data, *FPaths::ConvertRelativePathToFull(c))) {
++			used = FPaths::ConvertRelativePathToFull(c);
++			break;
++		}
++	}
++	constexpr int32 header_size = 24;
++	if (data.Num() < header_size || FMemory::Memcmp(data.GetData(), "MID360PT", 8) != 0) {
++		UE_LOG(LogTemp, Error, TEXT("Lidar pattern %s: missing or not a MID360PT file"), *file);
++		return false;
++	}
++	uint32 version, n_points, n_lasers;
++	float pps;
++	FMemory::Memcpy(&version, data.GetData() + 8, 4);
++	FMemory::Memcpy(&n_points, data.GetData() + 12, 4);
++	FMemory::Memcpy(&pps, data.GetData() + 16, 4);
++	FMemory::Memcpy(&n_lasers, data.GetData() + 20, 4);
++	if (version != 1 || n_points == 0 || pps <= 0 || data.Num() != header_size + int64(n_points) * 8) {
++		UE_LOG(LogTemp, Error, TEXT("Lidar pattern %s: bad header (version %u, %u points, %.0f/s, %d bytes)"),
++			*used, version, n_points, pps, data.Num());
++		return false;
++	}
++
++	pattern_dirs_.resize(n_points);
++	const float* angles = reinterpret_cast<const float*>(data.GetData() + header_size);
++	for (uint32 i = 0; i < n_points; ++i) {
++		const float az = FMath::DegreesToRadians(angles[2 * i]);
++		const float el = FMath::DegreesToRadians(angles[2 * i + 1]);
++		// Livox (y left, z up) -> AirSim sensor frame (y right, z down)
++		pattern_dirs_[i] = Vector3r(FMath::Cos(el) * FMath::Cos(az), -FMath::Cos(el) * FMath::Sin(az), -FMath::Sin(el));
++	}
++	pattern_file_pps_ = pps;
++	UE_LOG(LogTemp, Display, TEXT("Lidar pattern %s: %u shots, %.0f/s, %u lasers"), *used, n_points, pps, n_lasers);
++	return true;
+ }
+ 
+ // initializes information based on lidar configuration
+@@ -102,6 +175,8 @@
+ bool UnrealLidarSensor::getPointCloud(const msr::airlib::Pose& lidar_pose, const msr::airlib::Pose& vehicle_pose,
+ 	const msr::airlib::TTimeDelta delta_time, msr::airlib::vector<msr::airlib::real_T>& point_cloud, msr::airlib::vector<std::string>& groundtruth, msr::airlib::vector<msr::airlib::real_T>& point_cloud_final, msr::airlib::vector<std::string>& groundtruth_final)
+ {
++	if (pattern_mode_)
++		return getPatternPointCloud(lidar_pose, vehicle_pose, delta_time, point_cloud, groundtruth, point_cloud_final, groundtruth_final);
+ 
+ 	updatePose(lidar_pose, vehicle_pose);
+ 
+@@ -238,6 +313,117 @@
+ 	return refresh;
+ }
+ 
++// Pattern mode: every tick (UpdateFrequency) fires the shots due since the last tick (delta_time x points
++// per second, the fraction carried over), continuing through the pattern across ticks, all from the
++// current pose. A frame is published once PatternFrameRate's period has accumulated; it holds every shot
++// since the previous frame in firing order: shot i of n left at time_stamp - (n - 1 - i) / pps, so the
++// frame starts at time_stamp - n / pps and frame sizes vary by up to one tick's shots. Misses and hits
++// closer than MinRange are NaN points labelled "out_of_range". Points are in the sensor frame.
++bool UnrealLidarSensor::getPatternPointCloud(const msr::airlib::Pose& lidar_pose, const msr::airlib::Pose& vehicle_pose,
++	const msr::airlib::TTimeDelta delta_time, msr::airlib::vector<msr::airlib::real_T>& point_cloud, msr::airlib::vector<std::string>& groundtruth, msr::airlib::vector<msr::airlib::real_T>& point_cloud_final, msr::airlib::vector<std::string>& groundtruth_final)
++{
++	updatePose(lidar_pose, vehicle_pose);
++
++	// a long stall (start-up, pause) would otherwise fire a burst of hundreds of thousands of rays
++	const double dt = FMath::Min(double(delta_time), 2.0 * frame_period_);
++	if (dt <= 0)
++		return false;
++	frame_elapsed_ += dt;
++	shot_carry_ += dt * pattern_pps_;
++	const int32 n = int32(shot_carry_);
++	shot_carry_ -= n;
++
++	const msr::airlib::LidarSimpleParams& params = sensor_params_;
++	if (n > 0) {
++		const int32 base = int32(groundtruth.size());
++		point_cloud.resize(size_t(base + n) * 3);
++		groundtruth.resize(size_t(base + n));
++
++		// pattern shots and range noise, drawn here: gen_ / dist_ are not thread safe
++		const int32 pattern_size = int32(pattern_dirs_.size());
++		const double step = pattern_file_pps_ / pattern_pps_;  // < 1 never happens in practice; > 1 decimates
++		TArray<int32> shots;
++		shots.SetNumUninitialized(n);
++		for (int32 k = 0; k < n; ++k) {
++			shots[k] = int32(pattern_index_) % pattern_size;
++			pattern_index_ = FMath::Fmod(pattern_index_ + step, double(pattern_size));
++		}
++		TArray<float> noise;
++		if (params.generate_noise) {
++			noise.SetNumUninitialized(n);
++			for (int32 k = 0; k < n; ++k)
++				noise[k] = dist_(gen_);
++		}
++
++		const Vector3r start = VectorMath::add(lidar_pose, vehicle_pose).position;
++		const msr::airlib::Quaternionr sensor_to_world = VectorMath::coordOrientationAdd(lidar_pose.orientation, vehicle_pose.orientation);
++		auto to_unreal = [this](const Vector3r& p) {
++			return external_ ? ned_transform_->toFVector(p, 100, true) : ned_transform_->fromLocalNed(p);
++		};
++		const FVector trace_start = to_unreal(start);
++		const float nan = std::numeric_limits<float>::quiet_NaN();
++		const bool draw = sensor_params_.draw_debug_points;
++		TArray<FVector> draw_points;
++		if (draw)
++			draw_points.Init(FVector(nan), n);
++
++		ParallelFor(n, [&](int32 k) {
++			const Vector3r& dir = pattern_dirs_[shots[k]];
++			const Vector3r dir_world = VectorMath::rotateVector(dir, sensor_to_world, true);
++			FHitResult hit(ForceInit);
++			TArray<AActor*> ignore;
++			const bool is_hit = UAirBlueprintLib::GetObstacleAdv(actor_, trace_start, to_unreal(start + dir_world * params.range),
++				hit, ignore, ECC_Visibility, true, true);
++			const bool ignored = hit.PhysMaterial != nullptr &&
++				hit.PhysMaterial.Get()->GetFName().ToString().Contains("Lidar_Ignore_PhysicalMaterial");
++
++			const size_t i = size_t(base + k);
++			float range = hit.Distance / 100;
++			if (!is_hit || ignored || range < min_range_) {
++				point_cloud[3 * i] = point_cloud[3 * i + 1] = point_cloud[3 * i + 2] = nan;
++				groundtruth[i] = "out_of_range";
++				return;
++			}
++			if (params.generate_noise)
++				range += noise[k] * (1 + (range / params.range) * (params.noise_distance_scale - 1));
++			point_cloud[3 * i] = dir.x() * range;
++			point_cloud[3 * i + 1] = dir.y() * range;
++			point_cloud[3 * i + 2] = dir.z() * range;
++			const AActor* hit_actor = hit.GetActor();
++			groundtruth[i] = hit_actor != nullptr ? std::string(TCHAR_TO_UTF8(*hit_actor->GetName())) : std::string();
++			if (draw)
++				draw_points[k] = to_unreal(start + dir_world * range);
++		});
++
++		if (draw) {
++			// on the game thread, like the rotating lidar's points (see above); misses are NaN and skipped
++			TArray<FVector> hits;
++			for (const FVector& p : draw_points) {
++				if (!p.ContainsNaN())
++					hits.Add(p);
++			}
++			TWeakObjectPtr<UWorld> world(actor_->GetWorld());
++			const float life = 1.05f * float(frame_period_);
++			AsyncTask(ENamedThreads::GameThread, [world, hits = MoveTemp(hits), life]() {
++				if (UWorld* w = world.Get()) {
++					for (const FVector& p : hits)
++						UAirBlueprintLib::DrawPoint(w, p, 5, FColor::Green, false, life);
++				}
++			});
++		}
++	}
++
++	if (frame_elapsed_ + 1e-6 < frame_period_)
++		return false;
++	// keep the remainder: frames come at PatternFrameRate on average when firing faster than that
++	frame_elapsed_ = FMath::Fmod(frame_elapsed_ - frame_period_, frame_period_);
++	point_cloud_final = std::move(point_cloud);
++	groundtruth_final = std::move(groundtruth);
++	point_cloud.clear();
++	groundtruth.clear();
++	return true;
++}
++
+ FVector UnrealLidarSensor::Vector3rToFVector(const Vector3r& input_vector) {
+ 	return FVector(input_vector.x(), input_vector.y(), -input_vector.z());
+ }
