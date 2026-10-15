@@ -4,6 +4,8 @@ dji-s900-camera-drone/
 CTrackSim/Content/CTrack/Vehicles/S900/
 CTrackSim/Content/CTrack/Vehicles/BP_S900Pawn.uasset
 *.glb
+# ...except the SLAM yard meshes (our own, made by layout/slam_to_layout.py)
+!layout/meshes/**/*.glb
 *.gltf
 *.fbx
 

@@ -3,7 +3,7 @@
     "C-Track test field layout: single source for the Unreal map and the Gazebo world.",
     "Track frame (meters): origin = Start helipad, +X along the 100 m side (left->right in the",
     "layout drawing), +Y toward the C lane (downward in the drawing), +Z up. Positions are the",
-    "footprint center at ground level; size = [X, Y, Z] extent; yaw_deg about +Z.",
+    "footprint center at ground level; size = [X, Y, Z] extent; yaw_deg about +Z; optional z = bottom height (default 0).",
     "Unreal: same axes (cm). Gazebo (ENU): x = X, y = -Y, z = Z (GazeboDrone sends (x,-y,-z) to AirSim NED).",
     "Values marked in 'assumed' are not in the test design and should be replaced with measured ones."
   ],
