@@ -1,17 +1,16 @@
 # C-Track Sim (UE 5.8.2 + Cosys-AirSim 3.5.0 + PX4 v1.16 / Gazebo Classic)
 
-Two maps:
-- **Yard (default)**: a courtyard of the Inha University aerospace convergence campus (Songdo),
-  built from a handheld SLAM lidar scan: trees with trunks and canopies, objects and ground relief
-  as meshes made from the points, buildings as wall boxes. See [SLAM yard map](#slam-yard-map).
-- **C-Track**: the C-Track flight test field (A: path planning around tents, B: path following
-  through a fan wind zone, C: collision avoidance between poles, a wall, a balloon figure and a
-  crossing RC cart). `MAP=/Game/CTrack/Maps/CTrack` / `LAYOUT=layout/ctrack_layout.json`.
+Two maps, chosen with `CTRACK_MAP` (the same variable for Unreal, Gazebo and the map scripts):
+
+| `CTRACK_MAP` | map | layout |
+|---|---|---|
+| `CTrack` (default) | the C-Track flight test field (A: path planning around tents, B: path following through a fan wind zone, C: collision avoidance between poles, a wall, a balloon figure and a crossing RC cart) | `layout/ctrack_layout.json` |
+| `Yard` | a courtyard of the Inha University aerospace convergence campus (Songdo), built from a handheld SLAM lidar scan: trees with trunks and canopies, objects and ground relief as meshes made from the points, buildings as wall boxes. See [SLAM yard map](#slam-yard-map) | `layout/yard_slam_layout.json` |
 
 Gazebo Classic does the dynamics (PX4 SITL, x8); Unreal + Cosys-AirSim renders and simulates the
 lidar/cameras, fed with the vehicle pose by GazeboDrone (`ExternalPhysicsEngine`). Every obstacle
 exists in both worlds at the same place: both are generated from one layout file
-(`layout/yard_slam_layout.json` or `layout/ctrack_layout.json`).
+(`layout/ctrack_layout.json` or `layout/yard_slam_layout.json`).
 Moving obstacles and the wind zone live in Gazebo (plugins); GazeboDrone mirrors the moving
 obstacles onto Unreal actors of the same name.
 
@@ -22,7 +21,7 @@ layout/slam/yard_map_points.ply  the yard scan (10 cm voxels, levelling and fram
 layout/meshes/yard/              yard meshes: .obj for Gazebo, .glb for Unreal
 layout/ctrack_layout.json        C-Track: waypoints, obstacles, RC cart, wind zone
 layout/gen_gazebo_world.py       -> gazebo/worlds/ctrack.world (run by run_gazebo_px4.sh)
-CTrackSim/                       Unreal project (maps /Game/CTrack/Maps/Yard, .../CTrack)
+CTrackSim/                       Unreal project (maps /Game/CTrack/Maps/CTrack, .../Yard)
   Scripts/create_base_map.py       empty map, lights, PlayerStart at Start H (run once)
   Scripts/build_map_from_layout.py ground + layout into the map (rerunnable)
   Scripts/make_s900_pawn.py        optional vehicle look (model not included, see below)
@@ -69,8 +68,9 @@ and the editor target, builds AirLib with gcc + GazeboDrone in the PX4 dev image
 
 ## Run
 ```bash
-./run_unreal.sh [settings.json]  # wait for the window / API port 41451 (MAP=... for C-Track)
+./run_unreal.sh [settings.json]  # wait for the window / API port 41451
 ./gazebo/run_gazebo_px4.sh       # GUI=1 for gzclient, LAYOUT=other.json; logs in gazebo/logs/
+# the yard: export CTRACK_MAP=Yard before both (C-Track is the default)
 # PX4: MAVLink udp 14540 (offboard) / 14550 (GCS) on localhost
 docker stop ctrack-sitl          # stop
 ```
@@ -164,11 +164,14 @@ are facades only (no roofs); a few merged trees are still one mesh each.
 
 To rebuild the yard map in Unreal (close Unreal first):
 ```bash
+export CTRACK_MAP=Yard
 UE=~/Downloads/Linux_Unreal_Engine_5.8.2/Engine/Binaries/Linux/UnrealEditor-Cmd
 $UE "$PWD/CTrackSim/CTrackSim.uproject" -run=pythonscript -script="$PWD/CTrackSim/Scripts/create_base_map.py" -nullrhi -unattended   # once
 $UE "$PWD/CTrackSim/CTrackSim.uproject" -run=pythonscript -script="$PWD/CTrackSim/Scripts/build_map_from_layout.py" -nullrhi -unattended
 ```
-(`CTRACK_MAP=/Game/CTrack/Maps/CTrack` for C-Track; `CTRACK_LAYOUT` overrides the layout file.)
+(`CTRACK_LAYOUT` overrides the layout file.) Flying in the yard: most trees are 4-5 m tall with the
+canopy bottom at 2-3 m, so fly at about 2 m to avoid between trunks; START is the scan origin,
+GOAL = track (18, -47).
 
 ## Layout
 `layout/ctrack_layout.json` lists what each object is and which values are assumed rather than
@@ -179,7 +182,7 @@ lidar resolves them at range.
 After editing the layout, regenerate the Unreal map (close Unreal first; the commandlet saves it):
 ```bash
 UE=~/Downloads/Linux_Unreal_Engine_5.8.2
-CTRACK_MAP=/Game/CTrack/Maps/CTrack $UE/Engine/Binaries/Linux/UnrealEditor-Cmd "$PWD/CTrackSim/CTrackSim.uproject" \
+$UE/Engine/Binaries/Linux/UnrealEditor-Cmd "$PWD/CTrackSim/CTrackSim.uproject" \
     -run=pythonscript -script="$PWD/CTrackSim/Scripts/build_map_from_layout.py" -nullrhi -unattended
 ```
 Optional per obstacle: `z` (bottom height, default 0) and `visual: false` (hidden collider).

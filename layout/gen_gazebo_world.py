@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the Gazebo Classic world from a layout (default yard_slam_layout.json; ctrack_layout.json for C-Track).
+"""Generate the Gazebo Classic world from a layout (default ctrack_layout.json; yard_slam_layout.json for the yard).
 
 Track frame -> Gazebo ENU: x = X, y = -Y, z = Z, yaw = -yaw (see ctrack_layout.json).
 Spawn the vehicle at the Start helipad (Gazebo origin) facing +x so the AirSim view
@@ -158,7 +158,7 @@ def wind_plugin(wz):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("-l", "--layout", default=os.path.join(HERE, "yard_slam_layout.json"))
+    ap.add_argument("-l", "--layout", default=os.path.join(HERE, "ctrack_layout.json"))
     ap.add_argument("-o", "--output", default=os.path.join(HERE, "..", "gazebo", "worlds", "ctrack.world"))
     ap.add_argument("--mesh-root", help="where the layout's directory is seen by gzserver "
                     "(default: its host path); mesh files are relative to it")

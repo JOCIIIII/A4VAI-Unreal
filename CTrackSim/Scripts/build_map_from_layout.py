@@ -1,6 +1,6 @@
-"""Place a layout into its map: by default the SLAM yard (../../layout/yard_slam_layout.json) into
-/Game/CTrack/Maps/Yard; CTRACK_MAP=/Game/CTrack/Maps/CTrack places ctrack_layout.json into C-Track.
-CTRACK_LAYOUT overrides the layout file.
+"""Place a layout into its map: by default ../../layout/ctrack_layout.json into /Game/CTrack/Maps/CTrack;
+CTRACK_MAP=Yard places the SLAM yard (yard_slam_layout.json) into /Game/CTrack/Maps/Yard (a name in
+/Game/CTrack/Maps or a full path). CTRACK_LAYOUT overrides the layout file.
 
 Idempotent: actors tagged 'CTrackLayout' are deleted and re-spawned on every run.
 Track frame == Unreal frame relative to the Start helipad (PlayerStart, NED origin), meters -> cm.
@@ -26,7 +26,9 @@ import uuid
 import unreal
 
 # CTRACK_MAP / CTRACK_LAYOUT: build another map from another layout (e.g. a SLAM-derived one)
-MAP_PATH = os.environ.get("CTRACK_MAP", "/Game/CTrack/Maps/Yard")
+MAP_PATH = os.environ.get("CTRACK_MAP", "CTrack")
+if not MAP_PATH.startswith("/"):
+    MAP_PATH = "/Game/CTrack/Maps/" + MAP_PATH
 MAT_DIR = "/Game/CTrack/Materials"
 BASE_MAT = f"{MAT_DIR}/M_CTrackColor"
 TAG = "CTrackLayout"

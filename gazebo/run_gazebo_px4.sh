@@ -1,15 +1,20 @@
 #!/bin/bash
-# Start Gazebo Classic + PX4 SITL (x8) for the yard (or C-Track) layout in one container.
+# Start Gazebo Classic + PX4 SITL (x8) for a layout in one container: C-Track by default, the SLAM
+# yard with CTRACK_MAP=Yard (the same variable run_unreal.sh takes; MAP also works).
 # Start Unreal first (run_unreal.sh); GazeboDrone waits for its API port.
 #   GUI=1 ./run_gazebo_px4.sh   also opens gzclient
-#   LAYOUT=other.json ./run_gazebo_px4.sh   use another layout file (default: the SLAM yard;
-#                                           C-Track: LAYOUT=../layout/ctrack_layout.json)
+#   LAYOUT=other.json ./run_gazebo_px4.sh   use another layout file (overrides the map's layout)
 # Logs: gazebo/logs/   Stop: docker stop ctrack-sitl
 set -e
 HERE="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PX4_WS="${PX4_WS:-$HOME/Documents/A4VAI-SITL/PX4-Autopilot}"
 
-LAYOUT="${LAYOUT:-${HERE}/../layout/yard_slam_layout.json}"   # C-Track: LAYOUT=../layout/ctrack_layout.json
+MAP_NAME="$(basename "${CTRACK_MAP:-${MAP:-CTrack}}")"
+case "${MAP_NAME}" in
+    Yard) DEFAULT_LAYOUT=yard_slam_layout.json ;;
+    *)    DEFAULT_LAYOUT=ctrack_layout.json ;;
+esac
+LAYOUT="${LAYOUT:-${HERE}/../layout/${DEFAULT_LAYOUT}}"
 LAYOUT_DIR="$(dirname "$(readlink -f "${LAYOUT}")")"   # meshes in the layout are relative to it
 "${HERE}/../layout/gen_gazebo_world.py" -l "${LAYOUT}" -o "${HERE}/worlds/ctrack.world" --mesh-root /ctrack-layout
 mkdir -p "${HERE}/logs"
