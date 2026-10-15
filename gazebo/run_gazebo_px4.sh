@@ -4,7 +4,8 @@
 # Start Unreal first (run_unreal.sh); GazeboDrone waits for its API port.
 #   GUI=1 ./run_gazebo_px4.sh   also opens gzclient
 #   LAYOUT=other.json ./run_gazebo_px4.sh   use another layout file (overrides the map's layout)
-# Logs: gazebo/logs/   Stop: docker stop ctrack-sitl
+#   CTRACK_CONTAINER=name ./run_gazebo_px4.sh   container name (default ctrack-sitl), e.g. for tests
+# Logs: gazebo/logs/   Stop: docker stop ctrack-sitl (or the name given)
 set -e
 HERE="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PX4_WS="${PX4_WS:-$HOME/Documents/A4VAI-SITL/PX4-Autopilot}"
@@ -26,7 +27,8 @@ if [ -n "${GUI}" ] && [ -z "${NO_GPU}" ] && command -v nvidia-smi >/dev/null; th
     GPU_ARGS=(--gpus all -e NVIDIA_DRIVER_CAPABILITIES=all -e __GLX_VENDOR_LIBRARY_NAME=nvidia)
 fi
 
-docker run -d --rm --name ctrack-sitl --network host "${GPU_ARGS[@]}" \
+NAME="${CTRACK_CONTAINER:-ctrack-sitl}"
+docker run -d --rm --name "${NAME}" --network host "${GPU_ARGS[@]}" \
     -e SITL_AIRFRAME="${SITL_AIRFRAME:-x8}" -e GUI="${GUI}" -e MIRROR_MODELS="${MIRROR_MODELS}" \
     -e DISPLAY="${DISPLAY}" -v /tmp/.X11-unix:/tmp/.X11-unix \
     -v "${PX4_WS}":/home/user/workspace:ro \
@@ -34,4 +36,4 @@ docker run -d --rm --name ctrack-sitl --network host "${GPU_ARGS[@]}" \
     -v "${LAYOUT_DIR}":/ctrack-layout:ro \
     -v "${HERE}/logs":/ctrack-logs \
     --entrypoint bash px4io/px4-dev-simulation-focal:latest /ctrack/ctrack_sitl_entry.sh
-echo "ctrack-sitl started; logs in ${HERE}/logs"
+echo "${NAME} started; logs in ${HERE}/logs"

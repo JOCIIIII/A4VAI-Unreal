@@ -12,6 +12,10 @@ mkdir -p ${LOG}
 
 source ${PX4_SRC}/Tools/simulation/gazebo-classic/setup_gazebo.bash ${PX4_SRC} ${PX4_BUILD} > /dev/null
 export GAZEBO_PLUGIN_PATH=${GAZEBO_PLUGIN_PATH}:/ctrack/plugins/build
+# Gazebo transport on loopback: everything that uses it (gzserver, gz, gzclient, GazeboDrone) runs in
+# this container. On the host network it would otherwise advertise the first external interface
+# (LAN, Wi-Fi or VPN address, whichever is up when each process starts), which can change or drop.
+export GAZEBO_IP=127.0.0.1
 
 gzserver --verbose /ctrack/worlds/ctrack.world > ${LOG}/gzserver.log 2>&1 &
 
@@ -27,11 +31,25 @@ if [ -n "${GUI}" ]; then
 fi
 
 # GazeboDrone: Gazebo pose of ${MODEL} -> AirSim vehicle, moving obstacles -> Unreal actors
-# of the same name (restart if it drops)
+# of the same name. Restarted if it exits, and if it has printed no pose 30 s after starting
+# (it prints the poses of its first message; it has been seen stuck after "Connected!").
+POSE_LINES='^(local|global) \('
 (until timeout 2 bash -c "exec 3<>/dev/tcp/${AIRSIM_HOST}/41451" 2>/dev/null; do sleep 0.5; done
  while true; do
-     GAZEBO_DRONE_MODEL=${MODEL} GAZEBO_MIRROR_MODELS=${MIRROR_MODELS} /ctrack/bin/GazeboDrone
-     echo "[ctrack] GazeboDrone exited ($?) - restarting in 2 s"
+     before=$(grep -cE "${POSE_LINES}" ${LOG}/gazebodrone.log || true)
+     GAZEBO_DRONE_MODEL=${MODEL} GAZEBO_MIRROR_MODELS=${MIRROR_MODELS} /ctrack/bin/GazeboDrone &
+     pid=$!
+     for i in $(seq 1 30); do
+         sleep 1
+         [ "$(grep -cE "${POSE_LINES}" ${LOG}/gazebodrone.log)" -gt "${before}" ] && break
+         kill -0 ${pid} 2>/dev/null || break
+     done
+     if kill -0 ${pid} 2>/dev/null && [ "$(grep -cE "${POSE_LINES}" ${LOG}/gazebodrone.log)" -le "${before}" ]; then
+         echo "[ctrack] GazeboDrone got no pose in 30 s - restarting it"
+         kill ${pid} 2>/dev/null || true
+     fi
+     rc=0; wait ${pid} || rc=$?   # set -e: a failed wait must not end the loop
+     echo "[ctrack] GazeboDrone exited (${rc}) - restarting in 2 s"
      sleep 2
  done) > ${LOG}/gazebodrone.log 2>&1 &
 
