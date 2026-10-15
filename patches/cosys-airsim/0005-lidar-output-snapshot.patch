@@ -1,0 +1,74 @@
+diff --git a/AirLib/include/api/VehicleApiBase.hpp b/AirLib/include/api/VehicleApiBase.hpp
+index d8f3ed9..9138116 100755
+--- a/AirLib/include/api/VehicleApiBase.hpp
++++ b/AirLib/include/api/VehicleApiBase.hpp
+@@ -116,7 +116,7 @@ Some methods may not be applicable to specific vehicle in which case an exceptio
+         }
+ 
+         // Lidar APIs
+-        virtual const LidarData& getLidarData(const std::string& lidar_name) const
++        virtual LidarData getLidarData(const std::string& lidar_name) const
+         {
+             auto* lidar = static_cast<const LidarBase*>(findSensorByName(lidar_name, SensorBase::SensorType::Lidar));
+             if (lidar == nullptr)
+diff --git a/AirLib/include/sensors/lidar/LidarBase.hpp b/AirLib/include/sensors/lidar/LidarBase.hpp
+index 74316f9..2cf8f30 100644
+--- a/AirLib/include/sensors/lidar/LidarBase.hpp
++++ b/AirLib/include/sensors/lidar/LidarBase.hpp
+@@ -5,6 +5,8 @@
+ #define msr_airlib_LidarBase_hpp
+ 
+ #include "sensors/SensorBase.hpp"
++#include <memory>
++#include <mutex>
+ 
+ namespace msr
+ {
+@@ -25,23 +27,41 @@ namespace airlib
+             //call base
+             UpdatableObject::reportState(reporter);
+ 
+-            reporter.writeValue("Lidar-Timestamp", output_.time_stamp);
+-            reporter.writeValue("Lidar-NumPoints", static_cast<int>(output_.point_cloud.size() / 3));
++            const auto output = snapshot();
++            reporter.writeValue("Lidar-Timestamp", output->time_stamp);
++            reporter.writeValue("Lidar-NumPoints", static_cast<int>(output->point_cloud.size() / 3));
+         }
+ 
+-        const LidarData& getOutput() const
++        // A copy of the latest frame. Frames are written by the sensor (physics) thread and read by
++        // API / RPC threads; returning a reference let a reader copy a frame while the next one was
++        // being assigned over it, mixing time stamp, points and labels of two frames.
++        LidarData getOutput() const
+         {
+-            return output_;
++            return *snapshot();
+         }
+ 
+     protected:
+         void setOutput(const LidarData& output)
+         {
+-            output_ = output;
++            std::shared_ptr<const LidarData> next = std::make_shared<const LidarData>(output);
++            std::shared_ptr<const LidarData> previous;
++            {
++                std::lock_guard<std::mutex> lock(output_mutex_);
++                previous = std::move(output_);
++                output_ = std::move(next);
++            }
++            // previous is released here, outside the lock (or by the last reader still copying it)
+         }
+ 
+     private:
+-        LidarData output_;
++        std::shared_ptr<const LidarData> snapshot() const
++        {
++            std::lock_guard<std::mutex> lock(output_mutex_);
++            return output_;
++        }
++
++        mutable std::mutex output_mutex_;
++        std::shared_ptr<const LidarData> output_ = std::make_shared<const LidarData>();
+     };
+ }
+ } //namespace

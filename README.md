@@ -73,7 +73,36 @@ Settings (all: `RPLIDAR_A3` CPU lidar, 32 channels, 10 Hz, vertical FOV -7..52 d
 | `settings_gazebo.json` | Gazebo setup, range 40 m |
 | `settings_gazebo_policy30m.json` | same, lidar points drawn in the view |
 | `settings_gazebo_policy10m.json` | range 10 m |
+| `settings_gazebo_mid360.json` | Livox Mid-360 scan pattern (see below), range 40 m, points drawn |
 | `settings_standalone.json` | AirSim only (SimpleFlight physics, spawn 1 m up) for quick checks |
+
+## Lidar scan pattern (Livox Mid-360)
+With `"PatternFile"` the CPU lidar shoots a recorded shot sequence instead of its channel x
+measurement grid (patch `0004`; `NumberOfChannels`, `MeasurementsPerCycle`, `RotationsPerSecond`
+and the FOV keys are then ignored). `CTrackSim/Content/Lidar/mid360_pattern_2s.bin` is 2 s
+(400 000 shots at 200 000/s, 4 lasers) recorded from a Mid-360 in its non-repetitive mode, every
+shot including those without a return.
+
+| key | default | |
+|---|---|---|
+| `PatternFile` | - | relative paths are looked up in the project's Content and project directories |
+| `PatternPointsPerSecond` | file rate | lower values decimate the pattern in time (same angular coverage per second, fewer shots); capped at the file rate |
+| `PatternFrameRate` | 10 | frames published per second (on average) |
+| `UpdateFrequency` | 10 | in pattern mode: how often shots are fired; every firing traces the shots due since the previous one from the current pose (the settings use 50 Hz = 20 ms) |
+| `MinRange` | 0 | hits closer than this are reported as misses |
+| `Range`, `GenerateNoise`, `MinNoiseStandardDeviation`, pose | as before | |
+
+Output per frame: every shot fired since the previous frame, in firing order, continuing through
+the pattern across frames; shot i of n left at `time_stamp - (n - 1 - i) / pps`, so the frame starts
+at `time_stamp - n / pps` (where the previous frame ended). Frame sizes vary by up to one firing's
+shots (50 Hz: 16 800 or 21 000 shots, 20 000 on average). Misses and hits closer than `MinRange` are
+NaN points (label `out_of_range`). Points are in the sensor frame (x forward, y right, z down). If the
+pattern file cannot be loaded the sensor falls back to the rotating grid (frames of exactly
+`NumberOfChannels x MeasurementsPerCycle` points, 16 x 512 by default) and logs an error.
+Pattern file format: `"MID360PT"`, u32 version 1, u32 n_points, f32 points_per_second, u32 n_lasers,
+then n_points x (f32 azimuth_deg, f32 elevation_deg), little endian, Livox frame (x forward, y left,
+z up). `tools/check_mid360_pattern.py` checks a running sim against the file. The Cosys ROS2 bridge
+publishes the NaN points as they are but marks the PointCloud2 `is_dense: true`.
 
 ## Vehicle look (S900) - not included
 The Gazebo settings use an S900 octocopter look built by `CTrackSim/Scripts/make_s900_pawn.py`
@@ -118,6 +147,11 @@ The Gazebo world is regenerated on every `run_gazebo_px4.sh`.
   vehicle, but that order is not stable and moving obstacles appear in it. The vehicle is now
   selected by name (`GAZEBO_DRONE_MODEL`) and `GAZEBO_MIRROR_MODELS` are mirrored onto Unreal
   actors (simSetObjectPose).
+- `0004` lidar: scan pattern mode (above).
+- `0005` lidar output: frames are written by the physics thread and were copied by API / RPC
+  threads without a lock, so a read could mix time stamp, points and labels of two frames (126 of
+  22 000 reads with 20 000-shot frames). The latest frame is now an immutable snapshot swapped under
+  a lock and copied outside it. Changes AirLib headers: rebuild AirLib (`setup_deps.sh`).
 
 ## Known issues
 - After Unreal has run for hours, GazeboDrone sometimes connects but never receives a pose
