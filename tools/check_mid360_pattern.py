@@ -67,6 +67,10 @@ def main():
         time.sleep(0.01)
     c.simSetObjectScale("Pole_C1", scale0)
     frames = frames[1:]  # the first frame may predate the pose change
+    # a read mixing two frames (points and labels of different lengths) - patch 0005 prevents these
+    torn = sum(1 for _, p, gt in frames if len(p) != len(gt))
+    frames = [f for f in frames if len(f[1]) == len(f[2])]
+    print(f"torn frames (points != labels): {torn}")
 
     n = np.array([len(p) for _, p, _ in frames])
     dt = np.diff([t for t, _, _ in frames]) / 1e9
