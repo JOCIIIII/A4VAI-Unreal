@@ -1,4 +1,6 @@
-"""Place the C-Track layout (../../layout/ctrack_layout.json) into /Game/CTrack/Maps/CTrack.
+"""Place a layout into its map: by default the SLAM yard (../../layout/yard_slam_layout.json) into
+/Game/CTrack/Maps/Yard; CTRACK_MAP=/Game/CTrack/Maps/CTrack places ctrack_layout.json into C-Track.
+CTRACK_LAYOUT overrides the layout file.
 
 Idempotent: actors tagged 'CTrackLayout' are deleted and re-spawned on every run.
 Track frame == Unreal frame relative to the Start helipad (PlayerStart, NED origin), meters -> cm.
@@ -6,6 +8,13 @@ Track frame == Unreal frame relative to the Start helipad (PlayerStart, NED orig
 Moving obstacles: a mesh-less root actor named after the obstacle (e.g. RCCart_C) sits at the
 ground point, like the Gazebo model origin; the parts are attached to it. GazeboDrone mirrors the
 Gazebo model pose onto it by object name (simSetObjectPose).
+
+Meshes (layout "meshes", e.g. from slam_to_layout.py --meshes): each <file>.glb next to the layout
+is imported with Interchange into /Game/CTrack/Meshes/<map>/ and placed at the origin; with
+"collision": true it uses its triangles as the collider (complex as simple), so the lidar sees
+the same surface. After the import the mesh bounds are checked against the layout's track-frame
+"bounds"; a mirrored or turned import is corrected on the actor and logged.
+Obstacles with "visual": false are spawned hidden (still colliding).
 
 Run headless:
   UnrealEditor-Cmd CTrackSim.uproject -run=pythonscript -script=Scripts/build_map_from_layout.py -nullrhi -unattended
@@ -16,13 +25,17 @@ import uuid
 
 import unreal
 
-MAP_PATH = "/Game/CTrack/Maps/CTrack"
+# CTRACK_MAP / CTRACK_LAYOUT: build another map from another layout (e.g. a SLAM-derived one)
+MAP_PATH = os.environ.get("CTRACK_MAP", "/Game/CTrack/Maps/Yard")
 MAT_DIR = "/Game/CTrack/Materials"
 BASE_MAT = f"{MAT_DIR}/M_CTrackColor"
 TAG = "CTrackLayout"
 M = 100.0
 
-LAYOUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "layout", "ctrack_layout.json")
+_LAYOUTS = {"Yard": "yard_slam_layout.json", "CTrack": "ctrack_layout.json"}   # default layout per map
+LAYOUT = os.environ.get("CTRACK_LAYOUT") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "layout",
+    _LAYOUTS.get(MAP_PATH.rstrip("/").split("/")[-1], "ctrack_layout.json"))
 
 COLORS = {
     "orange": (1.0, 0.45, 0.0),
@@ -144,6 +157,91 @@ def spawn_shape(name, shape, size, color, x, y, z_bottom, yaw_deg=0.0, movable=F
     return actor
 
 
+MESH_DIR = "/Game/CTrack/Meshes/" + MAP_PATH.rstrip("/").split("/")[-1]
+
+
+def import_glb(path, dest):
+    """One static mesh per .glb (Interchange, combined), saved with its materials."""
+    pipe = unreal.InterchangeGenericAssetsPipeline()
+    mp = pipe.get_editor_property("mesh_pipeline")
+    cur = mp.get_editor_property("combine_static_meshes_behavior")
+    want = [n for n in dir(type(cur)) if n.isupper() and "ALL" in n]
+    if want:
+        mp.set_editor_property("combine_static_meshes_behavior", getattr(type(cur), want[0]))
+    mp.set_editor_property("import_skeletal_meshes", False)
+    pipe.get_editor_property("common_meshes_properties").set_editor_property("bake_meshes", True)
+    params = unreal.ImportAssetParameters()
+    params.is_automated = True
+    params.replace_existing = True
+    try:
+        params.override_pipelines.append(pipe)
+    except TypeError:
+        params.override_pipelines.append(unreal.SoftObjectPath(pipe.get_path_name()))
+    im = unreal.InterchangeManager.get_interchange_manager_scripted()
+    res = im.import_asset(dest, unreal.InterchangeManager.create_source_data(path), params)
+    for ref in (res or []):
+        obj = unreal.load_object(None, str(ref).split("'")[1] if "'" in str(ref) else str(ref))
+        if obj is not None:
+            eal.save_loaded_asset(obj, only_if_is_dirty=False)
+    meshes = [eal.load_asset(a) for a in eal.list_assets(dest, recursive=True)]
+    meshes = [m for m in meshes if isinstance(m, unreal.StaticMesh)]
+    if len(meshes) != 1:
+        raise RuntimeError(f"{path}: expected 1 static mesh in {dest}, got {len(meshes)}")
+    return meshes[0]
+
+
+def fit_transform(mesh, bounds_m):
+    """(scale, yaw) that maps the imported mesh bounds onto the expected track-frame bounds.
+    The .glb is written so that identity should match; the others catch an importer with a
+    different axis convention."""
+    b = mesh.get_bounds()
+    o, e = b.origin, b.box_extent
+    (x0, y0, z0), (x1, y1, z1) = bounds_m
+    want_o = ((x0 + x1) / 2 * M, (y0 + y1) / 2 * M)
+    want_e = ((x1 - x0) / 2 * M, (y1 - y0) / 2 * M)
+    cands = {  # name: (scale x, scale y, yaw) applied to the actor; resulting centre / extent
+        "identity": ((1, 1, 0), (o.x, o.y), (e.x, e.y)),
+        "mirror_y": ((1, -1, 0), (o.x, -o.y), (e.x, e.y)),
+        "mirror_x": ((-1, 1, 0), (-o.x, o.y), (e.x, e.y)),
+        "yaw_180": ((1, 1, 180), (-o.x, -o.y), (e.x, e.y)),
+        "yaw_90": ((1, 1, 90), (-o.y, o.x), (e.y, e.x)),
+        "yaw_-90": ((1, 1, -90), (o.y, -o.x), (e.y, e.x)),
+    }
+    err = {k: abs(c[0] - want_o[0]) + abs(c[1] - want_o[1]) + abs(x[0] - want_e[0]) + abs(x[1] - want_e[1])
+           for k, (_, c, x) in cands.items()}
+    best = min(err, key=err.get)
+    msg = (f"{mesh.get_name()}: imported centre ({o.x:.0f}, {o.y:.0f}) extent ({e.x:.0f}, {e.y:.0f}) cm, "
+           f"expected centre ({want_o[0]:.0f}, {want_o[1]:.0f}) extent ({want_e[0]:.0f}, {want_e[1]:.0f}) "
+           f"-> {best} (error {err[best]:.0f} cm)")
+    unreal.log_warning("[mesh check] " + msg)   # warning level: -Cmd runs drop plain log lines
+    if err[best] > 200:
+        unreal.log_warning(f"{mesh.get_name()}: no transform matches the expected bounds within 2 m")
+    return cands[best][0]
+
+
+def place_mesh(m, layout_dir):
+    path = os.path.join(layout_dir, m["file"] + ".glb")
+    mesh = import_glb(path, f"{MESH_DIR}/{m['name']}")
+    body = mesh.get_editor_property("body_setup")
+    if body is not None:
+        body.set_editor_property("collision_trace_flag", unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE
+                                 if m.get("collision") else unreal.CollisionTraceFlag.CTF_USE_DEFAULT)
+        eal.save_loaded_asset(mesh, only_if_is_dirty=False)
+    sx, sy, yaw = fit_transform(mesh, m["bounds"]) if "bounds" in m else (1, 1, 0)
+    actor = actor_sub.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, yaw))
+    actor.rename(m["name"])
+    actor.set_actor_label(m["name"])
+    comp = actor.static_mesh_component
+    comp.set_mobility(unreal.ComponentMobility.STATIC)
+    comp.set_static_mesh(mesh)
+    if not m.get("collision"):
+        comp.set_collision_profile_name("NoCollision")
+    actor.set_actor_scale3d(unreal.Vector(sx, sy, 1))
+    actor.tags = [TAG, m["name"]]
+    actor.set_folder_path("CTrack/Meshes")
+    return actor
+
+
 def main():
     with open(LAYOUT) as f:
         lay = json.load(f)
@@ -168,7 +266,13 @@ def main():
         ground.static_mesh_component.set_material(0, dirt_material())
 
     for o in lay["obstacles"]:
-        spawn_shape(o["name"], o["shape"], o["size"], o["color"], *o["pos"], 0.0, o.get("yaw_deg", 0.0))
+        a = spawn_shape(o["name"], o["shape"], o["size"], o["color"], *o["pos"], o.get("z", 0.0), o.get("yaw_deg", 0.0))
+        if not o.get("visual", True):
+            a.set_actor_hidden_in_game(True)
+            a.static_mesh_component.set_visibility(False)
+
+    for m in lay.get("meshes", []):
+        place_mesh(m, os.path.dirname(os.path.abspath(LAYOUT)))
 
     for m in lay.get("moving_obstacles", []):
         sx, sy = m["start"]
