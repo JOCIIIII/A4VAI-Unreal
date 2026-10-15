@@ -10,6 +10,7 @@ own left-handed Z-up frame, which is the track frame.
 """
 import json
 import struct
+import zlib
 
 import numpy as np
 from scipy import ndimage, sparse
@@ -87,8 +88,11 @@ def cylinder_mesh(cx, cy, d, z0, h, seg=12):
     return V, F
 
 
-def heightfield_mesh(xy, z, cell, mask_dilate=2, clamp=0.5, lift=0.03):
-    """Ground relief: median height per cell, holes filled from the nearest cell, data area only."""
+def heightfield_mesh(xy, z, cell, mask_dilate=2, clamp=0.5, lift=0.03, pads=()):
+    """Ground relief: median height per cell, holes filled from the nearest cell, data area only.
+    pads: (x, y, radius, blend, level) discs made flat - take-off and landing spots - at level
+    above the ground plane (None: the median height inside the disc), blending linearly back to
+    the relief over blend metres."""
     lo = xy.min(0)
     ij = np.floor((xy - lo) / cell).astype(int)
     shape = ij.max(0) + 1
@@ -103,6 +107,14 @@ def heightfield_mesh(xy, z, cell, mask_dilate=2, clamp=0.5, lift=0.03):
     H = H[ni, nj]
     H = ndimage.gaussian_filter(H, 1.0)
     H = np.maximum(H, 0.0) + lift      # keep it on top of the flat collider / ground plane
+    cx = lo[0] + (np.arange(shape[0]) + 0.5) * cell
+    cy = lo[1] + (np.arange(shape[1]) + 0.5) * cell
+    X, Y = np.meshgrid(cx, cy, indexing="ij")
+    for px, py, radius, blend, level in pads:
+        d = np.hypot(X - px, Y - py)
+        flat = np.median(H[d <= radius]) if level is None else level + lift
+        w = np.clip((d - radius) / blend, 0.0, 1.0)     # 0 on the pad, 1 outside the blend ring
+        H = flat * (1 - w) + H * w
     vid = -np.ones((shape[0] + 1, shape[1] + 1), int)   # vertices at cell corners
     cells = np.argwhere(area)
     corners = np.unique(np.concatenate([cells + d for d in ((0, 0), (1, 0), (1, 1), (0, 1))]), axis=0)
@@ -113,6 +125,49 @@ def heightfield_mesh(xy, z, cell, mask_dilate=2, clamp=0.5, lift=0.03):
     c, d = vid[cells[:, 0] + 1, cells[:, 1] + 1], vid[cells[:, 0], cells[:, 1] + 1]
     F = np.concatenate([np.c_[a, b, c], np.c_[a, c, d]])
     return V, F
+
+
+def write_heightmap(path, V, cell):
+    """Height of a heightfield mesh at its grid corners, for placing a vehicle on it: origin is
+    the lowest corner (x, y) in the mesh frame, heights[i][j] at origin + (i, j) * cell, null
+    outside the data area."""
+    lo = V[:, :2].min(0)
+    ij = np.rint((V[:, :2] - lo) / cell).astype(int)
+    H = [[None] * int(ij[:, 1].max() + 1) for _ in range(int(ij[:, 0].max() + 1))]
+    for (i, j), h in zip(ij, V[:, 2]):
+        H[i][j] = round(float(h), 3)
+    with open(path, "w") as f:
+        json.dump({"frame": "Gazebo ENU (SLAM frame), metres", "origin": [round(float(lo[0]), 3), round(float(lo[1]), 3)],
+                   "cell": cell, "heights": H}, f, separators=(",", ":"))
+
+
+def write_heightmap_png(path, V, cell):
+    """The heightfield as a Gazebo <heightmap> collider: 8-bit grey PNG, square with 2^n + 1 pixels
+    one cell apart. Gazebo 11 (ODE) centres a heightmap on the world origin whatever <pos> x, y or
+    the model pose say (only <pos> z is used), so the image is centred on (0, 0) and resampled
+    (bilinear) from the mesh grid; row 0 is the +y edge, column 0 the -x edge, pixel / 255 spans 0 ..
+    the top height. Outside the mesh it is 0, like the flat ground plane. Returns {"size", "pos"}."""
+    lo = V[:, :2].min(0)
+    ij = np.rint((V[:, :2] - lo) / cell).astype(int)
+    z1 = float(V[:, 2].max())
+    Hg = np.zeros(ij.max(0) + 1)
+    Hg[ij[:, 0], ij[:, 1]] = V[:, 2]
+    reach = np.abs(np.r_[lo, V[:, :2].max(0)]).max()
+    n = 2
+    while n * cell / 2 < reach + cell:
+        n *= 2
+    half = n * cell / 2
+    k = np.arange(n + 1) * cell
+    X, Y = np.meshgrid(-half + k, half - k)                 # [row, col]: row 0 at +y, col 0 at -x
+    G = ndimage.map_coordinates(Hg, [(X - lo[0]) / cell, (Y - lo[1]) / cell], order=1, mode="constant", cval=0.0)
+    img = np.rint(G / z1 * 255).clip(0, 255).astype(np.uint8)
+    raw = b"".join(b"\0" + row.tobytes() for row in img)
+    def chunk(t, d):
+        return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xFFFFFFFF)
+    with open(path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", n + 1, n + 1, 8, 0, 0, 0, 0))
+                + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+    return {"size": [n * cell, n * cell, round(z1, 4)], "pos": [0.0, 0.0, 0.0]}
 
 
 def merge(parts):

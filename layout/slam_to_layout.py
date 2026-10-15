@@ -17,9 +17,14 @@ surface of a facade scan). --collision mesh (default with --meshes) makes the me
 colliders too (the lidar then sees the real shapes) and keeps the primitives they replace only
 for reference ("obstacles_primitive"); --collision primitive keeps those primitives as invisible
 colliders under the meshes ("visual": false on each).
+The ground relief is a collider as well: vehicles stand and land on it (Gazebo: as a <heightmap>
+from <meshes>/ground_height.png), and its heights go to <meshes>/ground_height.json for spawning
+on it. The waypoints get flat pads (--pad-radius, plus a
+blend ring): START at the ground plane level, the others at their median relief height.
+--only-ground rebuilds just the ground mesh and its layout entry in an existing out.json.
 
   slam_to_layout.py map_points.ply out.json [--start X Y] [--goal X Y] [--preview out.png]
-                    [--meshes DIR] [--collision mesh|primitive]
+                    [--meshes DIR] [--collision mesh|primitive] [--pad-radius R] [--only-ground]
 Frames: --start/--goal and the preview are in the SLAM frame (as map.png: origin = where SLAM was
 started, right-handed, Z levelled). The layout is in the track frame of ctrack_layout.json, which
 is left-handed like Unreal: X = SLAM x, Y = -SLAM y (so Gazebo ENU = the SLAM frame).
@@ -44,6 +49,8 @@ TREE_MIN = 2.5       # clusters lower than this are objects, not trees [m]
 CANOPY_MIN = 1.5     # canopy bottom lower than this: one shape down to the ground (bush) [m]
 UNDER_MIN = 1.5      # undergrowth lower than this is grass, not an obstacle [m]
 TRUNK_D = (0.25, 0.8)  # trunk diameter clamp [m]; ground lidar sees one side only
+GROUND_CELL = 0.5    # ground relief grid [m]
+PAD_BLEND = 1.5      # waypoint pads blend back into the relief over this distance [m]
 
 
 def load_ply(path):
@@ -137,11 +144,44 @@ MESH_STYLE = {   # name: (rgb, collides)
     "canopy": ((0.20, 0.36, 0.13), True),
     "trunks": ((0.36, 0.25, 0.16), True),
     "objects": ((0.48, 0.42, 0.36), True),
-    "ground": ((0.36, 0.35, 0.24), False),   # relief is visual; the collider stays the flat ground
+    "ground": ((0.36, 0.35, 0.24), True),    # the relief is the ground (the flat plane stays under it)
 }
 
 
-def build_meshes(P, mesh_pts, trunks, out_dir, layout_dir, collide):
+def ground_mesh(P, pads):
+    g = P[np.abs(P[:, 2]) < GROUND_CLEAR]
+    return sm.heightfield_mesh(g[:, :2], g[:, 2], GROUND_CELL, pads=pads)
+
+
+def waypoint_pads(wps_slam, radius):
+    """Flat take-off / landing pads: START at the ground plane, the others at their relief."""
+    return [(x, y, radius, PAD_BLEND, 0.0 if name == "START" else None) for name, (x, y) in wps_slam.items()]
+
+
+def write_mesh(name, V, F, out_dir, layout_dir, collide):
+    """Write one mesh (.obj, .glb; the ground also its heightmap); returns its layout entry."""
+    rgb, coll = MESH_STYLE[name]
+    stem = os.path.join(out_dir, name)
+    sm.write_obj(stem + ".obj", V, F, rgb, f"Yard_{name}")
+    sm.write_glb(stem + ".glb", V, F, rgb, f"Yard_{name}")
+    lo, hi = V.min(0), V.max(0)
+    entry = {"name": f"Yard_{name}", "file": os.path.relpath(stem, layout_dir),
+             "rgb": list(rgb), "collision": bool(collide and coll), "triangles": int(len(F)),
+             # track-frame bounds [m], for the Unreal import check
+             "bounds": [[round(lo[0], 2), round(-hi[1], 2), round(lo[2], 2)],
+                        [round(hi[0], 2), round(-lo[1], 2), round(hi[2], 2)]]}
+    if name == "ground":
+        sm.write_heightmap(stem + "_height.json", V, GROUND_CELL)
+        entry["heightmap"] = os.path.relpath(stem + "_height.json", layout_dir)
+        # Gazebo collides with the relief as a <heightmap> (ODE's box/trimesh contacts on the sloped
+        # triangles flipped vehicles that landed on it); the mesh stays the visual and Unreal's collider
+        hm = sm.write_heightmap_png(stem + "_height.png", V, GROUND_CELL)
+        entry["gazebo_heightmap"] = dict(file=os.path.relpath(stem + "_height.png", layout_dir), **hm)
+    print(f"  mesh {name}: {len(F):,} triangles")
+    return entry
+
+
+def build_meshes(P, mesh_pts, trunks, out_dir, layout_dir, collide, pads=()):
     """Surface meshes in the SLAM frame (= Gazebo ENU). Returns the layout "meshes" entries."""
     os.makedirs(out_dir, exist_ok=True)
     parts = {
@@ -149,24 +189,12 @@ def build_meshes(P, mesh_pts, trunks, out_dir, layout_dir, collide):
         "trunks": [sm.cylinder_mesh(x, y, d, 0.0, h) for x, y, d, h in trunks],
         "objects": [sm.voxel_mesh(q, 0.15, close=1, dilate=1, smooth=8) for q in mesh_pts["objects"]],
     }
-    g = P[np.abs(P[:, 2]) < GROUND_CLEAR]
-    parts["ground"] = [sm.heightfield_mesh(g[:, :2], g[:, 2], 0.5)]
+    parts["ground"] = [ground_mesh(P, pads)]
     out = []
     for name, ps in parts.items():
         V, F = sm.merge(ps)
-        if not len(F):
-            continue
-        rgb, coll = MESH_STYLE[name]
-        stem = os.path.join(out_dir, name)
-        sm.write_obj(stem + ".obj", V, F, rgb, f"Yard_{name}")
-        sm.write_glb(stem + ".glb", V, F, rgb, f"Yard_{name}")
-        lo, hi = V.min(0), V.max(0)
-        out.append({"name": f"Yard_{name}", "file": os.path.relpath(stem, layout_dir),
-                    "rgb": list(rgb), "collision": bool(collide and coll), "triangles": int(len(F)),
-                    # track-frame bounds [m], for the Unreal import check
-                    "bounds": [[round(lo[0], 2), round(-hi[1], 2), round(lo[2], 2)],
-                               [round(hi[0], 2), round(-lo[1], 2), round(hi[2], 2)]]})
-        print(f"  mesh {name}: {len(F):,} triangles")
+        if len(F):
+            out.append(write_mesh(name, V, F, out_dir, layout_dir, collide))
     return out
 
 
@@ -178,7 +206,26 @@ def main():
     ap.add_argument("--preview")
     ap.add_argument("--meshes", help="directory for the surface meshes")
     ap.add_argument("--collision", choices=("mesh", "primitive"), default="mesh")
+    ap.add_argument("--pad-radius", type=float, default=2.0, help="flat pad radius at each waypoint [m]")
+    ap.add_argument("--only-ground", action="store_true",
+                    help="rebuild only the ground mesh (pads at the layout's waypoints) and its entry in OUT")
     a = ap.parse_args()
+
+    if a.only_ground:
+        if not a.meshes:
+            ap.error("--only-ground needs --meshes")
+        P = load_ply(a.ply)
+        P = level(P, fit_ground(P))
+        with open(a.out) as f:
+            lay = json.load(f)
+        wps = {k: (x, -y) for k, (x, y) in lay["waypoints"].items()}   # track -> SLAM frame
+        V, F = ground_mesh(P, waypoint_pads(wps, a.pad_radius))
+        entry = write_mesh("ground", V, F, a.meshes, os.path.dirname(os.path.abspath(a.out)),
+                           collide=a.collision == "mesh")
+        lay["meshes"] = [entry if m["name"] == entry["name"] else m for m in lay["meshes"]]
+        with open(a.out, "w") as f:
+            json.dump(lay, f, indent=1)
+        return
     mesh_pts = {"buildings": [], "canopy": [], "objects": []}
     trunks = []
 
@@ -318,7 +365,7 @@ def main():
     }
     if a.meshes:
         lay["meshes"] = build_meshes(P, mesh_pts, trunks, a.meshes, os.path.dirname(os.path.abspath(a.out)),
-                                     collide=a.collision == "mesh")
+                                     collide=a.collision == "mesh", pads=waypoint_pads(wps, a.pad_radius))
         walls = [o for o in track if o["name"].startswith("Wall_")]
         rest = [o for o in track if not o["name"].startswith("Wall_")]
         if a.collision == "mesh":

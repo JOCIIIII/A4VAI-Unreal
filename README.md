@@ -159,6 +159,19 @@ Unreal import: `build_map_from_layout.py` imports each `.glb` with Interchange i
 the layout's `bounds` ("[mesh check]" warnings; all four match within 1 cm). Gazebo: about 0.36 M
 collision triangles run at real-time factor 1.0; gzclient gets the GPU when `GUI=1`.
 
+Ground: the relief (0.03-0.42 m above the fitted ground plane) is the ground in both worlds, so
+vehicles stand and land on it and the lidar sees it. Unreal collides with the mesh; Gazebo with a
+`<heightmap>` made from the same grid (`meshes/yard/ground_height.png`) - ODE's contacts between the
+sloped triangles and the x8's thin skids flipped vehicles that landed on them. Gazebo 11 centres a
+heightmap on the world origin whatever its `<pos>` x, y or the model pose say, so the image is
+generated centred on (0, 0). Each waypoint gets a flat pad (2 m radius, 1.5 m blend; START at
+0.03 m, GOAL at its relief, 0.17 m; `--pad-radius`), and `gen_gazebo_world.py` puts the relief
+heights (`meshes/yard/ground_height.json`) next to the world as `ctrack.ground.json`, from which
+`ctrack_sitl_entry.sh` starts the vehicle 0.5 m above the highest ground under it, wherever it is
+spawned; it then drops onto the relief before arming. Spawn and land inside the scanned area: at
+its border the relief can end in a step of up to 0.3 m down to the flat ground. To rebuild only the
+ground (pads, heightmap) and its layout entry: `slam_to_layout.py ... --meshes meshes/yard --only-ground`.
+
 Known limits: the north direction and GPS position of the scan are not registered yet; buildings
 are facades only (no roofs); a few merged trees are still one mesh each.
 
@@ -171,7 +184,7 @@ $UE "$PWD/CTrackSim/CTrackSim.uproject" -run=pythonscript -script="$PWD/CTrackSi
 ```
 (`CTRACK_LAYOUT` overrides the layout file.) Flying in the yard: most trees are 4-5 m tall with the
 canopy bottom at 2-3 m, so fly at about 2 m to avoid between trunks; START is the scan origin,
-GOAL = track (18, -47).
+GOAL = track (18, -47). Altitudes are above the START pad (0.03 m); the GOAL pad is 0.14 m higher.
 
 ## Layout
 `layout/ctrack_layout.json` lists what each object is and which values are assumed rather than
