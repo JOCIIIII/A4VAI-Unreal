@@ -737,7 +737,7 @@
     0.35,
     0.24
    ],
-   "collision": false,
+   "collision": true,
    "triangles": 36464,
    "bounds": [
     [
@@ -750,7 +750,21 @@
      12.96,
      0.42
     ]
-   ]
+   ],
+   "heightmap": "meshes/yard/ground_height.json",
+   "gazebo_heightmap": {
+    "file": "meshes/yard/ground_height.png",
+    "size": [
+     256.0,
+     256.0,
+     0.4152
+    ],
+    "pos": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   }
   }
  ],
  "obstacles_primitive": [

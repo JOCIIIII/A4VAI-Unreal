@@ -19,9 +19,33 @@ export GAZEBO_IP=127.0.0.1
 
 gzserver --verbose /ctrack/worlds/ctrack.world > ${LOG}/gzserver.log 2>&1 &
 
-# Spawn at the Start helipad facing +x (Track +X): must match the Unreal PlayerStart
+# Spawn at the Start helipad facing +x (Track +X): must match the Unreal PlayerStart.
+# (SITL-Runner's harness rewrites this pose with sed: keep the string below as it is.)
+SPAWN="--model-name=${MODEL} -x 0 -y 0 -z 0 -Y 0"
+GROUND=/ctrack/worlds/ctrack.ground.json
+if [ -f "${GROUND}" ]; then
+    # the ground relief is a collider in this world: start the vehicle's origin 0.5 m above the
+    # highest ground under it, so the unarmed vehicle drops onto the relief. (Spawning into it, as
+    # z 0 does on the flat ground plane, leaves the body stuck in the mesh: a trimesh doesn't push
+    # a sunk body out like the plane does.)
+    SPAWN=$(python3 - "${GROUND}" ${SPAWN} <<'PY'
+import json, sys
+g = json.load(open(sys.argv[1])); a = sys.argv[2:]
+x, y = float(a[a.index("-x") + 1]), float(a[a.index("-y") + 1])
+(ox, oy), c, H = g["origin"], g["cell"], g["heights"]
+r = 0.8   # vehicle footprint radius [m]
+i0, i1 = max(0, int((x - r - ox) // c)), min(len(H), int((x + r - ox) // c) + 2)
+j0, j1 = max(0, int((y - r - oy) // c)), min(len(H[0]), int((y + r - oy) // c) + 2)
+hs = [H[i][j] for i in range(i0, i1) for j in range(j0, j1) if H[i][j] is not None]
+k = a.index("-z") + 1
+a[k] = "%.3f" % max(float(a[k]), max(hs) + 0.5 if hs else 0.0)
+print(" ".join(a))
+PY
+) || SPAWN="--model-name=${MODEL} -x 0 -y 0 -z 0 -Y 0"
+    echo "[ctrack] spawn on the ground relief: ${SPAWN}"
+fi
 while gz model --verbose --spawn-file=${PX4_SRC}/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/${MODEL}/${MODEL}.sdf \
-        --model-name=${MODEL} -x 0 -y 0 -z 0 -Y 0 2>&1 | grep -q "An instance of Gazebo is not running"; do
+        ${SPAWN} 2>&1 | grep -q "An instance of Gazebo is not running"; do
     sleep 1
 done
 echo "[ctrack] ${MODEL} spawned"

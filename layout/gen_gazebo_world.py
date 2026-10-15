@@ -11,6 +11,7 @@ import argparse
 import json
 import math
 import os
+import shutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -78,11 +79,18 @@ def shape_elems(name, shape, size, color, pose="0 0 0 0 0 0", collision=True, vi
 
 
 def mesh_model(m, mesh_root):
-    """Static mesh from the layout "meshes" list (.obj, already in Gazebo ENU, metres)."""
+    """Static mesh from the layout "meshes" list (.obj, already in Gazebo ENU, metres). A ground relief
+    with "gazebo_heightmap" collides as that <heightmap> instead of its triangles."""
     uri = f"file://{mesh_root}/{m['file']}.obj"
     rgba = "{} {} {} 1".format(*m.get("rgb", (0.5, 0.5, 0.5)))
     geo = f"<geometry><mesh><uri>{uri}</uri></mesh></geometry>"
-    coll = (f"        <collision name='{m['name']}_collision'>{geo}</collision>\n"
+    cgeo = geo
+    if "gazebo_heightmap" in m:
+        h = m["gazebo_heightmap"]
+        cgeo = (f"<geometry><heightmap><uri>file://{mesh_root}/{h['file']}</uri>"
+                f"<size>{h['size'][0]} {h['size'][1]} {h['size'][2]}</size>"
+                f"<pos>{h['pos'][0]} {h['pos'][1]} {h['pos'][2]}</pos></heightmap></geometry>")
+    coll = (f"        <collision name='{m['name']}_collision'>{cgeo}</collision>\n"
             if m.get("collision", False) else "")
     return f"""    <model name='{m['name']}'>
       <static>true</static>
@@ -211,6 +219,14 @@ def main():
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
     with open(args.output, "w") as f:
         f.write(world)
+    # heights of a ground relief collider next to the world (<world>.ground.json), so that
+    # ctrack_sitl_entry.sh spawns the vehicle on it; removed for flat-ground layouts
+    ground = os.path.splitext(args.output)[0] + ".ground.json"
+    relief = [m for m in lay.get("meshes", []) if m.get("collision") and m.get("heightmap")]
+    if relief:
+        shutil.copyfile(os.path.join(os.path.dirname(os.path.abspath(args.layout)), relief[0]["heightmap"]), ground)
+    elif os.path.exists(ground):
+        os.remove(ground)
     print(f"wrote {os.path.abspath(args.output)} ({len(models)} models, {len(plugins)} plugins)")
 
 
