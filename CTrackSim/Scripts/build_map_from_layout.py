@@ -14,7 +14,11 @@ is imported with Interchange into /Game/CTrack/Meshes/<map>/ and placed at the o
 "collision": true it uses its triangles as the collider (complex as simple), so the lidar sees
 the same surface. After the import the mesh bounds are checked against the layout's track-frame
 "bounds"; a mirrored or turned import is corrected on the actor and logged.
-Obstacles with "visual": false are spawned hidden (still colliding).
+Obstacles with "visual": false are spawned hidden (still colliding). An obstacle with "sway"
+({"top_amplitude_m", "freq_hz", "direction_deg"}) is attached to a CTrackSwayActor (<name>_Sway) at its
+foot that tilts it, so its top sways (Unreal only; Gazebo keeps the upright collider).
+A moving-obstacle part with "unreal_mesh" uses that static mesh (pivot at its foot, unscaled) instead
+of the box/cylinder, which stays the Gazebo collider.
 
 Run headless:
   UnrealEditor-Cmd CTrackSim.uproject -run=pythonscript -script=Scripts/build_map_from_layout.py -nullrhi -unattended
@@ -137,6 +141,28 @@ def color_material(color):
     mel.set_material_instance_vector_parameter_value(mi, "Color", unreal.LinearColor(r, g, b, 1.0))
     eal.save_asset(path)
     return mi
+
+
+def spawn_mesh(name, mesh_path, x, y, z_bottom, yaw_deg=0.0, movable=False):
+    """A static mesh with its pivot at its foot (e.g. the people in /Game/CTrack/People), unscaled."""
+    actor = actor_sub.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(x * M, y * M, z_bottom * M),
+                                             unreal.Rotator(0, 0, yaw_deg))
+    actor.rename(name)
+    actor.set_actor_label(name)
+    comp = actor.static_mesh_component
+    comp.set_mobility(unreal.ComponentMobility.MOVABLE if movable else unreal.ComponentMobility.STATIC)
+    mesh = unreal.load_asset(mesh_path)
+    if mesh is None:
+        raise RuntimeError(f"{name}: no static mesh {mesh_path}")
+    comp.set_static_mesh(mesh)
+    actor.tags = [TAG, name]
+    actor.set_folder_path(f"CTrack/{name.split('_')[0]}")
+    return actor
+
+
+def attach(child, parent):
+    child.attach_to_actor(parent, "", unreal.AttachmentRule.KEEP_WORLD,
+                          unreal.AttachmentRule.KEEP_WORLD, unreal.AttachmentRule.KEEP_WORLD, False)
 
 
 def spawn_shape(name, shape, size, color, x, y, z_bottom, yaw_deg=0.0, movable=False, collision=True):
@@ -268,7 +294,21 @@ def main():
         ground.static_mesh_component.set_material(0, dirt_material())
 
     for o in lay["obstacles"]:
-        a = spawn_shape(o["name"], o["shape"], o["size"], o["color"], *o["pos"], o.get("z", 0.0), o.get("yaw_deg", 0.0))
+        sway = o.get("sway")
+        a = spawn_shape(o["name"], o["shape"], o["size"], o["color"], *o["pos"], o.get("z", 0.0), o.get("yaw_deg", 0.0),
+                        movable=bool(sway))
+        if sway:
+            x, y = o["pos"]
+            base = actor_sub.spawn_actor_from_class(unreal.CTrackSwayActor, unreal.Vector(x * M, y * M, o.get("z", 0.0) * M))
+            base.rename(f"{o['name']}_Sway")
+            base.set_actor_label(f"{o['name']}_Sway")
+            base.set_editor_property("height", o["size"][2] * M)
+            base.set_editor_property("top_amplitude", sway.get("top_amplitude_m", 0.3) * M)
+            base.set_editor_property("frequency", sway.get("freq_hz", 1.0))
+            base.set_editor_property("direction_deg", sway.get("direction_deg", 90.0))
+            base.tags = [TAG, f"{o['name']}_Sway"]
+            base.set_folder_path(f"CTrack/{o['name'].split('_')[0]}")
+            attach(a, base)
         if not o.get("visual", True):
             a.set_actor_hidden_in_game(True)
             a.static_mesh_component.set_visibility(False)
@@ -286,10 +326,12 @@ def main():
         root.set_folder_path(f"CTrack/{m['name'].split('_')[0]}")
         for p in m["parts"]:
             ox, oy, oz = p["offset"]
-            a = spawn_shape(f"{m['name']}_{p['name']}", p["shape"], p["size"], p["color"],
-                            sx + ox, sy + oy, oz, movable=True)
-            a.attach_to_actor(root, "", unreal.AttachmentRule.KEEP_WORLD,
-                              unreal.AttachmentRule.KEEP_WORLD, unreal.AttachmentRule.KEEP_WORLD, False)
+            if "unreal_mesh" in p:
+                a = spawn_mesh(f"{m['name']}_{p['name']}", p["unreal_mesh"], sx + ox, sy + oy, oz, movable=True)
+            else:
+                a = spawn_shape(f"{m['name']}_{p['name']}", p["shape"], p["size"], p["color"],
+                                sx + ox, sy + oy, oz, movable=True)
+            attach(a, root)
 
     for wz in lay.get("wind_zones", []):
         for i, (fx, fy) in enumerate(wz["fans"], 1):

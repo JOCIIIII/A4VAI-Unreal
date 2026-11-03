@@ -24,15 +24,15 @@
     {"name": "Tent_A1", "zone": "A", "shape": "box", "pos": [15.0, -1.0], "size": [3.0, 6.0, 2.5], "yaw_deg": 0, "color": "orange"},
     {"name": "Tent_A2", "zone": "A", "shape": "box", "pos": [35.0, 1.0], "size": [3.0, 6.0, 2.5], "yaw_deg": 0, "color": "orange"},
 
-    {"name": "Balloon_C", "zone": "C", "shape": "cylinder", "pos": [19.5, 21.5], "size": [0.6, 0.6, 2.0], "yaw_deg": 0, "color": "yellow"},
-    {"name": "WoodWall_C", "zone": "C", "shape": "box", "pos": [30.0, 26.0], "size": [0.3, 2.4, 3.0], "yaw_deg": 0, "color": "brown"},
+    {"name": "Balloon_C", "zone": "C", "shape": "cylinder", "pos": [16.0, 26.0], "size": [0.3, 0.3, 4.0], "yaw_deg": 0, "color": "yellow",
+     "sway": {"top_amplitude_m": 0.3, "freq_hz": 1.0, "direction_deg": 90}},
+    {"name": "WoodWall_C", "zone": "C", "shape": "box", "pos": [30.0, 26.0], "size": [0.3, 9.0, 3.0], "yaw_deg": 0, "color": "brown"},
 
-    {"name": "Pole_C1", "zone": "C", "shape": "cylinder", "pos": [66.0, 26.0], "size": [0.5, 0.5, 2.0], "yaw_deg": 0, "color": "orange"},
-    {"name": "Pole_C2", "zone": "C", "shape": "cylinder", "pos": [56.0, 23.0], "size": [0.5, 0.5, 2.0], "yaw_deg": 0, "color": "orange"},
-    {"name": "Pole_C3", "zone": "C", "shape": "cylinder", "pos": [56.0, 29.0], "size": [0.5, 0.5, 2.0], "yaw_deg": 0, "color": "orange"},
-    {"name": "Pole_C4", "zone": "C", "shape": "cylinder", "pos": [46.0, 20.0], "size": [0.5, 0.5, 2.0], "yaw_deg": 0, "color": "orange"},
-    {"name": "Pole_C5", "zone": "C", "shape": "cylinder", "pos": [46.0, 26.0], "size": [0.5, 0.5, 2.0], "yaw_deg": 0, "color": "orange"},
-    {"name": "Pole_C6", "zone": "C", "shape": "cylinder", "pos": [46.0, 32.0], "size": [0.5, 0.5, 2.0], "yaw_deg": 0, "color": "orange"}
+    {"name": "Pole_C1", "zone": "C", "shape": "cylinder", "pos": [66.0, 23.0], "size": [0.5, 0.5, 2.0], "yaw_deg": 0, "color": "orange"},
+    {"name": "Pole_C2", "zone": "C", "shape": "cylinder", "pos": [66.0, 29.0], "size": [0.5, 0.5, 2.0], "yaw_deg": 0, "color": "orange"},
+    {"name": "Pole_C3", "zone": "C", "shape": "cylinder", "pos": [56.0, 26.0], "size": [0.5, 0.5, 2.0], "yaw_deg": 0, "color": "orange"},
+    {"name": "Pole_C4", "zone": "C", "shape": "cylinder", "pos": [46.0, 23.0], "size": [0.5, 0.5, 2.0], "yaw_deg": 0, "color": "orange"},
+    {"name": "Pole_C5", "zone": "C", "shape": "cylinder", "pos": [46.0, 29.0], "size": [0.5, 0.5, 2.0], "yaw_deg": 0, "color": "orange"}
   ],
 
   "moving_obstacles": [
@@ -41,14 +41,15 @@
       "zone": "C",
       "start": [39.0, 33.0],
       "end": [39.0, 18.5],
-      "speed_mps": 1.0,
+      "speed_mps": 3.0,
       "loop": true,
       "trigger_model": "x8",
       "trigger_distance": 15.0,
       "trigger_point": [39.0, 26.0],
       "parts": [
         {"name": "Body", "shape": "box", "offset": [0.0, 0.0, 0.0], "size": [0.6, 0.4, 0.3], "color": "blue"},
-        {"name": "Panel", "shape": "box", "offset": [0.0, 0.0, 0.3], "size": [0.02, 1.2, 1.8], "color": "brown"}
+        {"name": "Person", "shape": "box", "offset": [0.0, 0.0, 0.3], "size": [0.5, 0.4, 1.8], "color": "white",
+         "unreal_mesh": "/Game/CTrack/People/SM_Person_Manny"}
       ]
     }
   ],
@@ -72,11 +73,12 @@
   "assumed": [
     "Tent footprint orientation (6 m side along Y) and centers, read from the drawing",
     "Pole diameter 0.5 m (2026-10-12; 0.1 m was below the AirSim lidar spacing of 1.875 deg beyond ~3 m - the policy saw C1 only within ~7 m; backup/ctrack_layout.20261012_before_poles05.json)",
-    "Balloon figure modeled as a 0.6 m diameter cylinder",
-    "Wood wall: 3 m read as height; width 2.4 m and thickness 0.3 m",
-    "RC cart body 0.6x0.4x0.3 m, plywood panel 1.2 m wide x 1.8 m high, speed 1.0 m/s, travel Y 33 -> 18.5 m",
+    "Final demo scenario (workshop material v0.06, slides 17-20, applied 2026-11-03; before: backup/ctrack_layout.20261103_before_workshop_v006.json): wall 9 m wide, 5 poles in an X, balloon on the lane, cart 3 m/s carrying a standing person",
+    "Balloon figure (sky dancer) modeled as a 0.3 m diameter, 4 m cylinder; in Unreal only its top sways +-0.3 m across the lane at 1 Hz ('sway'), the Gazebo collider stays upright",
+    "Wood wall: 3 m read as height; plywood 9 m wide (across the lane, Y 21.5-30.5) and 0.3 m thick",
+    "RC cart body 0.6x0.4x0.3 m carrying a standing person (Unreal: SM_Person_Manny ~1.8 m; Gazebo: 0.5x0.4x1.8 m box from 0.3 m), speed 3.0 m/s, travel Y 33 -> 18.5 m",
     "RC cart starts when the vehicle is within 15 m of the crossing point (39, 26), then shuttles back and forth",
     "Wind zone B: 3.0 m/s toward -X, height 0-10 m; vehicle drag CdA 0.1 m^2; fan visual size",
-    "Pole field changed 2026-10-10 to rows of 1-2-3 poles (X 66 / 56 / 46, 6 m apart across) so the X8 (prop tips 0.77 m) can weave through at 3-5 m/s; the drawing's 2+1+2 field 5 m apart was too tight (original: backup/ctrack_layout.20261010_before_123poles.json)"
+    "Pole field: 5 poles in an X (2-1-2: X 66 / 56 / 46, 6 m apart across, 10 m apart along) per the final scenario; 2026-10-10..11-03 it was 1-2-3 rows (backup/ctrack_layout.20261103_before_workshop_v006.json)"
   ]
 }
