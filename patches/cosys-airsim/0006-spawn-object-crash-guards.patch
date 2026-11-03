@@ -1,0 +1,37 @@
+diff --git a/Unreal/Plugins/AirSim/Source/AirBlueprintLib.cpp b/Unreal/Plugins/AirSim/Source/AirBlueprintLib.cpp
+index 89346e6..33692f7 100644
+--- a/Unreal/Plugins/AirSim/Source/AirBlueprintLib.cpp
++++ b/Unreal/Plugins/AirSim/Source/AirBlueprintLib.cpp
+@@ -674,7 +674,8 @@ std::vector<std::string> UAirBlueprintLib::ListMatchingActors(const UObject *con
+ 			if (paintable_components.Num() == 1) {
+ 				if (UStaticMeshComponent* staticmesh_component = Cast<UStaticMeshComponent>(component)) {
+ 					if (actor->GetParentActor()) {
+-						mesh_name = staticmesh_component->GetStaticMesh()->GetName();
++						//a static mesh component may have no mesh (e.g. a bare root): name it None instead of crashing
++						mesh_name = staticmesh_component->GetStaticMesh() ? staticmesh_component->GetStaticMesh()->GetName() : FString(TEXT("None"));
+ 						mesh_name.Append("_");
+ 						mesh_name.Append(FString::FromInt(0));
+ 						mesh_name.Append("_");
+@@ -694,7 +695,8 @@ std::vector<std::string> UAirBlueprintLib::ListMatchingActors(const UObject *con
+ 			}
+ 			else {
+ 				if (UStaticMeshComponent* staticmesh_component = Cast<UStaticMeshComponent>(component)) {
+-					mesh_name = staticmesh_component->GetStaticMesh()->GetName();
++					//a static mesh component may have no mesh (e.g. a bare root): name it None instead of crashing
++					mesh_name = staticmesh_component->GetStaticMesh() ? staticmesh_component->GetStaticMesh()->GetName() : FString(TEXT("None"));
+ 					mesh_name.Append("_");
+ 					mesh_name.Append(FString::FromInt(index));
+ 					mesh_name.Append("_");
+diff --git a/Unreal/Plugins/AirSim/Source/WorldSimApi.cpp b/Unreal/Plugins/AirSim/Source/WorldSimApi.cpp
+index fed6484..69c5b32 100644
+--- a/Unreal/Plugins/AirSim/Source/WorldSimApi.cpp
++++ b/Unreal/Plugins/AirSim/Source/WorldSimApi.cpp
+@@ -94,7 +94,7 @@ std::string WorldSimApi::spawnObject(const std::string& object_name, const std::
+     FString asset_name(load_object.c_str());
+     FAssetData* load_asset = simmode_->asset_map.Find(asset_name);
+ 
+-    if (!load_asset->IsValid()) {
++    if (load_asset == nullptr || !load_asset->IsValid()) {
+         throw std::invalid_argument("There were no objects with name " + load_object + " found in the Registry");
+     }
+ 

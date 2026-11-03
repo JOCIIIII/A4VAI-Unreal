@@ -223,6 +223,9 @@ The Gazebo world is regenerated on every `run_gazebo_px4.sh`.
   threads without a lock, so a read could mix time stamp, points and labels of two frames (126 of
   22 000 reads with 20 000-shot frames). The latest frame is now an immutable snapshot swapped under
   a lock and copied outside it. Changes AirLib headers: rebuild AirLib (`setup_deps.sh`).
+- `0006` simSpawnObject: `ListMatchingActors` (used to pick a free name) dereferenced the mesh of
+  every static mesh component and crashed (SIGSEGV) on one without a mesh, seen in the editor build;
+  an unknown asset name also crashed instead of raising the error.
 
 ## Known issues
 - GazeboDrone sometimes connected to AirSim but never received a Gazebo pose (lidar kept publishing
