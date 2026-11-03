@@ -1,6 +1,7 @@
 #include "CTrackSwayActor.h"
 
 #include "Components/SceneComponent.h"
+#include "Engine/World.h"
 
 ACTrackSwayActor::ACTrackSwayActor()
 {
