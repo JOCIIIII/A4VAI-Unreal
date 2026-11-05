@@ -16,7 +16,9 @@ the same surface. After the import the mesh bounds are checked against the layou
 "bounds"; a mirrored or turned import is corrected on the actor and logged.
 Obstacles with "visual": false are spawned hidden (still colliding). An obstacle with "sway"
 ({"top_amplitude_m", "freq_hz", "direction_deg"}) is attached to a CTrackSwayActor (<name>_Sway) at its
-foot that tilts it, so its top sways (Unreal only; Gazebo keeps the upright collider).
+foot that tilts it, so its top sways (Unreal only; Gazebo keeps the upright collider). "arms"
+({"shoulder_m", "length_m", "diameter_m", "up_deg", "direction_deg"}) adds two cylinders <name>_Arm1/2
+from the axis at shoulder height, up_deg above horizontal, along +-direction_deg; they sway with it.
 A moving-obstacle part with "unreal_mesh" uses that static mesh (pivot at its foot, unscaled) instead
 of the box/cylinder, which stays the Gazebo collider.
 
@@ -24,6 +26,7 @@ Run headless:
   UnrealEditor-Cmd CTrackSim.uproject -run=pythonscript -script=Scripts/build_map_from_layout.py -nullrhi -unattended
 """
 import json
+import math
 import os
 import uuid
 
@@ -297,6 +300,7 @@ def main():
         sway = o.get("sway")
         a = spawn_shape(o["name"], o["shape"], o["size"], o["color"], *o["pos"], o.get("z", 0.0), o.get("yaw_deg", 0.0),
                         movable=bool(sway))
+        holder = a
         if sway:
             x, y = o["pos"]
             base = actor_sub.spawn_actor_from_class(unreal.CTrackSwayActor, unreal.Vector(x * M, y * M, o.get("z", 0.0) * M))
@@ -309,6 +313,19 @@ def main():
             base.tags = [TAG, f"{o['name']}_Sway"]
             base.set_folder_path(f"CTrack/{o['name'].split('_')[0]}")
             attach(a, base)
+            holder = base
+        arms = o.get("arms")
+        if arms:
+            x, y = o["pos"]
+            up, az = math.radians(arms.get("up_deg", 30.0)), math.radians(arms.get("direction_deg", 90.0))
+            length, dia = arms["length_m"], arms["diameter_m"]
+            for i, side in enumerate((1, -1), 1):
+                d = (side * math.cos(az) * math.cos(up), side * math.sin(az) * math.cos(up), math.sin(up))
+                cz = o.get("z", 0.0) + arms["shoulder_m"] + d[2] * length / 2
+                arm = spawn_shape(f"{o['name']}_Arm{i}", "cylinder", [dia, dia, length], o["color"],
+                                  x + d[0] * length / 2, y + d[1] * length / 2, cz - length / 2, movable=bool(sway))
+                arm.set_actor_rotation(unreal.MathLibrary.make_rot_from_z(unreal.Vector(*d)), False)
+                attach(arm, holder)
         if not o.get("visual", True):
             a.set_actor_hidden_in_game(True)
             a.static_mesh_component.set_visibility(False)

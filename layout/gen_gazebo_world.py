@@ -100,12 +100,48 @@ def mesh_model(m, mesh_root):
     </model>"""
 
 
-def static_model(name, shape, size, color, x, y, yaw_deg=0.0, collision=True, z=0.0, visual=True):
+def arm_poses(arms, height):
+    """(track-frame unit direction, Gazebo pose relative to the model centre) of the two arms of an
+    obstacle with "arms": cylinders from the axis at shoulder_m, up_deg above horizontal, along
+    +-direction_deg (track frame)."""
+    up, az = math.radians(arms.get("up_deg", 30.0)), math.radians(arms.get("direction_deg", 90.0))
+    length, shoulder = arms["length_m"], arms["shoulder_m"]
+    out = []
+    for side in (1, -1):
+        d = (side * math.cos(az) * math.cos(up), side * math.sin(az) * math.cos(up), math.sin(up))
+        c = (d[0] * length / 2, d[1] * length / 2, shoulder - height / 2 + d[2] * length / 2)
+        g = (d[0], -d[1], d[2])                       # Gazebo ENU: y = -Y
+        # rotation taking the cylinder axis (z) onto g, as fixed-axis roll-pitch-yaw
+        ax = (-g[1], g[0], 0.0)
+        s_, c_ = math.hypot(ax[0], ax[1]), g[2]
+        if s_ < 1e-9:
+            rpy = (0.0, 0.0, 0.0)
+        else:
+            k = (ax[0] / s_, ax[1] / s_, 0.0)
+            ang = math.atan2(s_, c_)
+            cs, sn, v = math.cos(ang), math.sin(ang), 1 - math.cos(ang)
+            r11 = cs + k[0] * k[0] * v
+            r21 = k[1] * k[0] * v
+            r31 = -k[1] * sn
+            r32 = k[0] * sn
+            r33 = cs
+            rpy = (math.atan2(r32, r33), -math.asin(r31), math.atan2(r21, r11))
+        out.append((d, f"{c[0]:.3f} {-c[1]:.3f} {c[2]:.3f} {rpy[0]:.6f} {rpy[1]:.6f} {rpy[2]:.6f}"))
+    return out
+
+
+def static_model(name, shape, size, color, x, y, yaw_deg=0.0, collision=True, z=0.0, visual=True, arms=None):
+    extra = ""
+    if arms:
+        dia = arms["diameter_m"]
+        for i, (_, pose) in enumerate(arm_poses(arms, size[2])):
+            extra += "\n" + shape_elems(f"{name}_Arm{i + 1}", "cylinder", [dia, dia, arms["length_m"]], color, pose,
+                                       collision=collision, visual=visual)
     return f"""    <model name='{name}'>
       <static>true</static>
       <pose>{to_gz(x, y, z + size[2] / 2, yaw_deg)}</pose>
       <link name='link'>
-{shape_elems(name, shape, size, color, collision=collision, visual=visual)}
+{shape_elems(name, shape, size, color, collision=collision, visual=visual)}{extra}
       </link>
     </model>"""
 
@@ -182,7 +218,7 @@ def main():
     for o in lay["obstacles"]:
         models.append(static_model(o["name"], o["shape"], o["size"], o["color"],
                                    *o["pos"], o.get("yaw_deg", 0.0), z=o.get("z", 0.0),
-                                   visual=o.get("visual", True)))
+                                   visual=o.get("visual", True), arms=o.get("arms")))
     for m in lay.get("meshes", []):
         models.append(mesh_model(m, mesh_root))
     for m in lay.get("moving_obstacles", []):

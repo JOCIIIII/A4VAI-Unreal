@@ -192,8 +192,9 @@ Unpaced frames (here 5-12 ms) shown on a 60 Hz screen or captured by a recorder 
 ## Layout
 `layout/ctrack_layout.json` lists what each object is and which values are assumed rather than
 measured (`assumed`). It follows the final demo scenario (workshop material v0.06, 2026-11-03):
-a 9 m plywood wall across the C lane, five 0.5 m poles in an X (X 66 / 56 / 46, 6 m apart across),
-a 4 m balloon figure on the lane whose top sways +-0.3 m at 1 Hz in Unreal (`sway`; upright in
+a 9 m plywood wall across the C lane, five poles in an X (X 66 / 56 / 46, 6 m apart across; 30 mm,
+the real diameter: the lidar returns only a few points per scan from them), a 4 m balloon figure with
+two 1.2 m arms on the lane whose top sways +-0.3 m at 1 Hz in Unreal (`sway`, `arms`; upright in
 Gazebo), and the RC cart at 3 m/s carrying a standing person (`unreal_mesh` SM_Person_Manny; a
 0.5 x 0.4 x 1.8 m box in Gazebo).
 
