@@ -186,6 +186,9 @@ $UE "$PWD/CTrackSim/CTrackSim.uproject" -run=pythonscript -script="$PWD/CTrackSi
 canopy bottom at 2-3 m, so fly at about 2 m to avoid between trunks; START is the scan origin,
 GOAL = track (18, -47). Altitudes are above the START pad (0.03 m); the GOAL pad is 0.14 m higher.
 
+Smooth viewing / screen recording: `CTRACK_VSYNC=1 ./run_unreal.sh` paces frames to the display (VSync).
+Unpaced frames (here 5-12 ms) shown on a 60 Hz screen or captured by a recorder make the motion judder.
+
 ## Layout
 `layout/ctrack_layout.json` lists what each object is and which values are assumed rather than
 measured (`assumed`). It follows the final demo scenario (workshop material v0.06, 2026-11-03):
@@ -226,6 +229,14 @@ The Gazebo world is regenerated on every `run_gazebo_px4.sh`.
 - `0006` simSpawnObject: `ListMatchingActors` (used to pick a free name) dereferenced the mesh of
   every static mesh component and crashed (SIGSEGV) on one without a mesh, seen in the editor build;
   an unknown asset name also crashed instead of raising the error.
+- `0007` stamped external poses: Gazebo publishes a pose every 4 ms physics step, but they reach Unreal in
+  bursts (0-6 per frame); drawing the newest moved the vehicle and the chase view in uneven steps (per-frame
+  motion +-43% at 5 m/s, 6.6% of frames still). GazeboDrone now sends each vehicle pose with its Gazebo sim
+  time (`simSetVehiclePoseStamped`, falling back to `simSetVehiclePose` on an AirSim without it) and mirrors
+  models from its own thread, so `simSetObjectPose` (which waits for the game thread) no longer holds up the
+  vehicle poses. The pawn is drawn on a clock that follows the stamps evenly, 25 ms behind (settings
+  `"ExternalPoseRenderDelay"`, s; 0 draws the newest pose): per-frame motion +-2%. The physics body, so the
+  lidar/IMU, and `simGetVehiclePose` keep the newest pose. The camera director ticks after the sim mode.
 
 ## Known issues
 - GazeboDrone sometimes connected to AirSim but never received a Gazebo pose (lidar kept publishing

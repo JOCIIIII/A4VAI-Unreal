@@ -1,0 +1,366 @@
+diff --git a/AirLib/include/api/RpcLibClientBase.hpp b/AirLib/include/api/RpcLibClientBase.hpp
+index b6920eb..c0a3523 100644
+--- a/AirLib/include/api/RpcLibClientBase.hpp
++++ b/AirLib/include/api/RpcLibClientBase.hpp
+@@ -140,6 +140,8 @@ namespace airlib
+         void simSetDistanceSensorPose(const std::string& distance_sensor_name, const Pose& pose, const std::string& vehicle_name = "");
+         Pose simGetVehiclePose(const std::string& vehicle_name = "") const;
+         void simSetVehiclePose(const Pose& pose, bool ignore_collision, const std::string& vehicle_name = "");
++        // pose sample stamped with the source simulator's clock (s), e.g. Gazebo sim time
++        void simSetVehiclePoseStamped(const Pose& pose, double stamp, bool ignore_collision, const std::string& vehicle_name = "");
+         void simSetTraceLine(const std::vector<float>& color_rgba, float thickness = 3.0f, const std::string& vehicle_name = "");
+ 
+         vector<ImageCaptureBase::ImageResponse> simGetImages(vector<ImageCaptureBase::ImageRequest> request, const std::string& vehicle_name = "");
+diff --git a/AirLib/include/api/VehicleSimApiBase.hpp b/AirLib/include/api/VehicleSimApiBase.hpp
+index d4e3240..5127644 100644
+--- a/AirLib/include/api/VehicleSimApiBase.hpp
++++ b/AirLib/include/api/VehicleSimApiBase.hpp
+@@ -53,6 +53,13 @@ namespace airlib
+ 
+         virtual Pose getPose() const = 0;
+         virtual void setPose(const Pose& pose, bool ignore_collision) = 0;
++        // A pose sample from an external simulator, stamped with that simulator's clock (s). Applied like
++        // setPose; a vehicle may use the stamps to draw the motion evenly when samples arrive in bursts.
++        virtual void setPoseStamped(const Pose& pose, double stamp, bool ignore_collision)
++        {
++            (void)stamp;
++            setPose(pose, ignore_collision);
++        }
+         virtual const Kinematics::State* getGroundTruthKinematics() const = 0;
+         virtual void setKinematics(const Kinematics::State& state, bool ignore_collision) = 0;
+         virtual Kinematics::State getPhysicsRawKinematics() = 0;
+diff --git a/AirLib/src/api/RpcLibClientBase.cpp b/AirLib/src/api/RpcLibClientBase.cpp
+index ae98313..065c32a 100644
+--- a/AirLib/src/api/RpcLibClientBase.cpp
++++ b/AirLib/src/api/RpcLibClientBase.cpp
+@@ -344,6 +344,11 @@ __pragma(warning(disable : 4239))
+             pimpl_->client.call("simSetVehiclePose", RpcLibAdaptorsBase::Pose(pose), ignore_collision, vehicle_name);
+         }
+ 
++        void RpcLibClientBase::simSetVehiclePoseStamped(const Pose& pose, double stamp, bool ignore_collision, const std::string& vehicle_name)
++        {
++            pimpl_->client.call("simSetVehiclePoseStamped", RpcLibAdaptorsBase::Pose(pose), stamp, ignore_collision, vehicle_name);
++        }
++
+         void RpcLibClientBase::simSetKinematics(const Kinematics::State& state, bool ignore_collision, const std::string& vehicle_name)
+         {
+             pimpl_->client.call("simSetKinematics", RpcLibAdaptorsBase::KinematicsState(state), ignore_collision, vehicle_name);
+diff --git a/AirLib/src/api/RpcLibServerBase.cpp b/AirLib/src/api/RpcLibServerBase.cpp
+index e8e81b3..e980a49 100755
+--- a/AirLib/src/api/RpcLibServerBase.cpp
++++ b/AirLib/src/api/RpcLibServerBase.cpp
+@@ -265,6 +265,10 @@ namespace airlib
+             getVehicleSimApi(vehicle_name)->setPose(pose.to(), ignore_collision);
+         });
+ 
++        pimpl_->server.bind("simSetVehiclePoseStamped", [&](const RpcLibAdaptorsBase::Pose& pose, double stamp, bool ignore_collision, const std::string& vehicle_name) -> void {
++            getVehicleSimApi(vehicle_name)->setPoseStamped(pose.to(), stamp, ignore_collision);
++        });
++
+         pimpl_->server.bind("simGetVehiclePose", [&](const std::string& vehicle_name) -> RpcLibAdaptorsBase::Pose {
+             const auto& pose = getVehicleSimApi(vehicle_name)->getPose();
+             return RpcLibAdaptorsBase::Pose(pose);
+diff --git a/GazeboDrone/src/main.cpp b/GazeboDrone/src/main.cpp
+index 2f0f53c..75924f2 100644
+--- a/GazeboDrone/src/main.cpp
++++ b/GazeboDrone/src/main.cpp
+@@ -31,6 +31,9 @@ STRICT_MODE_ON
+ 
+ #include "vehicles/multirotor/api/MultirotorRpcLibClient.hpp"
+ #include <chrono>
++#include <condition_variable>
++#include <mutex>
++#include <thread>
+ 
+ #include <iostream>
+ #include <cstdlib>
+@@ -50,17 +53,48 @@ msr::airlib::MultirotorRpcLibClient client;
+ // Needed when the world has other non-static models (e.g. a moving obstacle) that can come first.
+ static std::string drone_model;
+ 
++// Vehicle poses carry their Gazebo sim time (simSetVehiclePoseStamped), so Unreal can draw the motion
++// evenly although the samples arrive in bursts; an AirSim without that call gets simSetVehiclePose.
++static bool stamped_poses = true;
++
+ // Other Gazebo models mirrored to Unreal actors of the same name (env GAZEBO_MIRROR_MODELS,
+-// comma separated), e.g. moving obstacles driven by a Gazebo plugin. Throttled per model.
++// comma separated), e.g. moving obstacles driven by a Gazebo plugin. Sent by mirrorLoop on its own
++// thread and connection: simSetObjectPose waits for Unreal's game thread (up to a frame), which held
++// up the vehicle poses queued behind it. At most every MIRROR_PERIOD, the newest pose per model.
+ static std::set<std::string> mirror_models;
+-static std::map<std::string, std::chrono::steady_clock::time_point> mirror_last;
++static std::map<std::string, Pose> mirror_pending;
++static std::mutex mirror_mutex;
++static std::condition_variable mirror_cv;
+ static constexpr auto MIRROR_PERIOD = std::chrono::milliseconds(20);
+ 
++void mirrorLoop()
++{
++    msr::airlib::MultirotorRpcLibClient mirror_client;
++    mirror_client.confirmConnection();
++    while (true) {
++        std::map<std::string, Pose> poses;
++        {
++            std::unique_lock<std::mutex> lock(mirror_mutex);
++            mirror_cv.wait(lock, [] { return !mirror_pending.empty(); });
++            poses.swap(mirror_pending);
++        }
++        try {
++            for (const auto& model : poses)
++                mirror_client.simSetObjectPose(model.first, model.second, true);
++        }
++        catch (const std::exception& e) {
++            std::cout << "mirror: " << e.what() << std::endl;
++        }
++        std::this_thread::sleep_for(MIRROR_PERIOD);
++    }
++}
++
+ void cbLocalPose(ConstPosesStampedPtr& msg)
+ {
+     std::cout << std::fixed;
+     std::cout << std::setprecision(3);
+     static int count = 0;
++    const double stamp = msg->time().sec() + msg->time().nsec() * 1e-9;
+     for (int i = 0; i < msg->pose_size(); i++) {
+         auto x = msg->pose(i).position().x();
+         auto y = msg->pose(i).position().y();
+@@ -86,16 +120,24 @@ void cbLocalPose(ConstPosesStampedPtr& msg)
+             msr::airlib::Vector3r p(x, -y, -z);
+             msr::airlib::Quaternionr o(ow, ox, -oy, -oz);
+ 
+-            client.simSetVehiclePose(Pose(p, o), true);
++            if (stamped_poses) {
++                try {
++                    client.simSetVehiclePoseStamped(Pose(p, o), stamp, true);
++                }
++                catch (const rpc::rpc_error& e) {
++                    std::cout << "simSetVehiclePoseStamped not available, using simSetVehiclePose (" << e.what() << ")" << std::endl;
++                    stamped_poses = false;
++                }
++            }
++            if (!stamped_poses)
++                client.simSetVehiclePose(Pose(p, o), true);
+         }
+         else if (mirror_models.count(msg->pose(i).name())) {
+-            const auto now = std::chrono::steady_clock::now();
+-            auto& last = mirror_last[msg->pose(i).name()];
+-            if (now - last >= MIRROR_PERIOD) {
+-                last = now;
+-                client.simSetObjectPose(msg->pose(i).name(),
+-                                        Pose(msr::airlib::Vector3r(x, -y, -z), msr::airlib::Quaternionr(ow, ox, -oy, -oz)), true);
++            {
++                std::lock_guard<std::mutex> lock(mirror_mutex);
++                mirror_pending[msg->pose(i).name()] = Pose(msr::airlib::Vector3r(x, -y, -z), msr::airlib::Quaternionr(ow, ox, -oy, -oz));
+             }
++            mirror_cv.notify_one();
+         }
+     }
+     if (count % MESSAGE_THROTTLE == 0) {
+@@ -144,6 +186,8 @@ int main(int _argc, char** _argv)
+     }
+ 
+     client.confirmConnection();
++    if (!mirror_models.empty())
++        std::thread(mirrorLoop).detach();
+ 
+     // Load gazebo
+     gazebo::client::setup(_argc, _argv);
+diff --git a/Unreal/Plugins/AirSim/Source/SimMode/SimModeBase.cpp b/Unreal/Plugins/AirSim/Source/SimMode/SimModeBase.cpp
+index 2dea003..fd20b65 100755
+--- a/Unreal/Plugins/AirSim/Source/SimMode/SimModeBase.cpp
++++ b/Unreal/Plugins/AirSim/Source/SimMode/SimModeBase.cpp
+@@ -1648,6 +1648,8 @@ void ASimModeBase::initializeCameraDirector(const FTransform& camera_transform,
+     else {
+         CameraDirector = static_cast<AAirSimCameraDirector*>(camera_dirs[0]);
+     }
++    //the vehicles are moved in this actor's Tick: follow them after that, in the same frame
++    CameraDirector->AddTickPrerequisiteActor(this);
+ }
+ 
+ bool ASimModeBase::toggleRecording()
+diff --git a/Unreal/Plugins/AirSim/Source/Vehicles/Multirotor/MultirotorPawnSimApi.cpp b/Unreal/Plugins/AirSim/Source/Vehicles/Multirotor/MultirotorPawnSimApi.cpp
+index 625be69..6a1497f 100644
+--- a/Unreal/Plugins/AirSim/Source/Vehicles/Multirotor/MultirotorPawnSimApi.cpp
++++ b/Unreal/Plugins/AirSim/Source/Vehicles/Multirotor/MultirotorPawnSimApi.cpp
+@@ -1,4 +1,5 @@
+ #include "MultirotorPawnSimApi.h"
++#include "common/Settings.hpp"
+ #include "AirBlueprintLib.h"
+ #include "vehicles/multirotor/MultiRotorParamsFactory.hpp"
+ #include "UnrealSensors/UnrealSensorFactory.h"
+@@ -28,6 +29,7 @@ void MultirotorPawnSimApi::initialize()
+ 
+     //initialize private vars
+     last_phys_pose_ = Pose::nanPose();
++    render_delay_ = msr::airlib::Settings::singleton().getFloat("ExternalPoseRenderDelay", render_delay_);
+     pending_pose_status_ = PendingPoseStatus::NonePending;
+     reset_pending_ = false;
+     did_reset_ = false;
+@@ -102,12 +104,14 @@ void MultirotorPawnSimApi::updateRendering(float dt)
+     }
+ 
+     if (!VectorMath::hasNan(last_phys_pose_)) {
++        Pose render_pose = last_phys_pose_;
++        getRenderPose(dt, render_pose);
+         if (pending_pose_status_ == PendingPoseStatus::RenderPending) {
+-            PawnSimApi::setPose(last_phys_pose_, pending_pose_collisions_);
++            PawnSimApi::setPose(render_pose, pending_pose_collisions_);
+             pending_pose_status_ = PendingPoseStatus::NonePending;
+         }
+         else
+-            PawnSimApi::setPose(last_phys_pose_, false);
++            PawnSimApi::setPose(render_pose, false);
+     }
+ 
+     //UAirBlueprintLib::LogMessage(TEXT("Collision (raw) Count:"), FString::FromInt(collision_response.collision_count_raw), LogDebugLevel::Unimportant);
+@@ -129,7 +133,97 @@ void MultirotorPawnSimApi::updateRendering(float dt)
+     pawn_events_->getActuatorSignal().emit(rotor_actuator_info_);
+ }
+ 
++MultirotorPawnSimApi::Pose MultirotorPawnSimApi::getPose() const
++{
++    //the pawn is drawn behind a stamped stream: report the newest pose, as the physics body (sensors) has it
++    if (hasPoseStream()) {
++        multirotor_physics_body_->lock();
++        const Pose pose = multirotor_physics_body_->getPose();
++        multirotor_physics_body_->unlock();
++        return pose;
++    }
++    return PawnSimApi::getPose();
++}
++
+ void MultirotorPawnSimApi::setPose(const Pose& pose, bool ignore_collision)
++{
++    {
++        std::lock_guard<std::mutex> lock(pose_samples_mutex_);
++        pose_samples_.clear(); //an unstamped pose (e.g. a teleport through the API) ends a stamped stream
++    }
++    applyPose(pose, ignore_collision);
++}
++
++void MultirotorPawnSimApi::setPoseStamped(const Pose& pose, double stamp, bool ignore_collision)
++{
++    applyPose(pose, ignore_collision);
++    if (render_delay_ <= 0)
++        return;
++    std::lock_guard<std::mutex> lock(pose_samples_mutex_);
++    if (!pose_samples_.empty()) {
++        const PoseSample& newest = pose_samples_.back();
++        if (stamp == newest.stamp) {
++            pose_samples_.back().pose = pose;
++            pose_sample_arrival_ = FPlatformTime::Seconds();
++            return;
++        }
++        //time going back (simulator reset) or a jump (teleport) starts a new stream
++        if (stamp < newest.stamp || (pose.position - newest.pose.position).norm() > 2.0f)
++            pose_samples_.clear();
++    }
++    pose_samples_.push_back({ stamp, pose });
++    while (pose_samples_.size() > 2 && pose_samples_.back().stamp - pose_samples_.front().stamp > 1.0)
++        pose_samples_.pop_front();
++    pose_sample_arrival_ = FPlatformTime::Seconds();
++}
++
++bool MultirotorPawnSimApi::hasPoseStream() const
++{
++    std::lock_guard<std::mutex> lock(pose_samples_mutex_);
++    return !pose_samples_.empty() && FPlatformTime::Seconds() - pose_sample_arrival_ < 0.5;
++}
++
++bool MultirotorPawnSimApi::getRenderPose(float dt, Pose& pose)
++{
++    std::lock_guard<std::mutex> lock(pose_samples_mutex_);
++    if (pose_samples_.empty() || FPlatformTime::Seconds() - pose_sample_arrival_ > 0.5) {
++        render_clock_valid_ = false; //no stamped stream (or it stopped): draw the newest pose
++        return false;
++    }
++    const double newest = pose_samples_.back().stamp;
++    if (!render_clock_valid_ || render_time_ < pose_samples_.front().stamp || newest - render_time_ > 0.5) {
++        //(re)start render_delay_ behind the newest sample
++        render_clock_valid_ = true;
++        render_time_ = FMath::Max(newest - render_delay_, pose_samples_.front().stamp);
++        render_prev_newest_ = newest;
++        render_source_rate_ = 1;
++        render_lead_ = render_delay_;
++    }
++    else if (dt > 0) {
++        //advance at the rate the stamps advance (smoothed over ~1 s), nudged to stay render_delay_ behind
++        render_source_rate_ += ((newest - render_prev_newest_) / dt - render_source_rate_) * FMath::Min(1.0, dt / 1.0);
++        render_prev_newest_ = newest;
++        render_lead_ += ((newest - render_time_) - render_lead_) * FMath::Min(1.0, dt / 0.5);
++        const double rate = FMath::Clamp(render_source_rate_ + (render_lead_ - render_delay_) * 2.0, 0.0, 2.0);
++        render_time_ = FMath::Min(render_time_ + rate * dt, newest);
++    }
++    //interpolate between the samples around render_time_ (stamps strictly increase)
++    size_t hi = pose_samples_.size() - 1;
++    while (hi > 0 && pose_samples_[hi - 1].stamp >= render_time_)
++        --hi;
++    if (hi == 0) {
++        pose = pose_samples_.front().pose;
++        return true;
++    }
++    const PoseSample& a = pose_samples_[hi - 1];
++    const PoseSample& b = pose_samples_[hi];
++    const float t = static_cast<float>((render_time_ - a.stamp) / (b.stamp - a.stamp));
++    pose.position = a.pose.position + (b.pose.position - a.pose.position) * t;
++    pose.orientation = a.pose.orientation.slerp(t, b.pose.orientation);
++    return true;
++}
++
++void MultirotorPawnSimApi::applyPose(const Pose& pose, bool ignore_collision)
+ {
+     multirotor_physics_body_->lock();
+     multirotor_physics_body_->setPose(pose);
+diff --git a/Unreal/Plugins/AirSim/Source/Vehicles/Multirotor/MultirotorPawnSimApi.h b/Unreal/Plugins/AirSim/Source/Vehicles/Multirotor/MultirotorPawnSimApi.h
+index 5212ed7..7870e23 100644
+--- a/Unreal/Plugins/AirSim/Source/Vehicles/Multirotor/MultirotorPawnSimApi.h
++++ b/Unreal/Plugins/AirSim/Source/Vehicles/Multirotor/MultirotorPawnSimApi.h
+@@ -10,7 +10,9 @@
+ #include "common/CommonStructs.hpp"
+ #include "common/common_utils/UniqueValueMap.hpp"
+ #include "MultirotorPawnEvents.h"
++#include <deque>
+ #include <future>
++#include <mutex>
+ 
+ class MultirotorPawnSimApi : public PawnSimApi
+ {
+@@ -44,7 +46,9 @@ public:
+     virtual void reportState(StateReporter& reporter) override;
+     virtual UpdatableObject* getPhysicsBody() override;
+ 
++    virtual Pose getPose() const override;
+     virtual void setPose(const Pose& pose, bool ignore_collision) override;
++    virtual void setPoseStamped(const Pose& pose, double stamp, bool ignore_collision) override;
+     virtual void setKinematics(const Kinematics::State& state, bool ignore_collision) override;
+     virtual void pawnTick(float dt) override;
+ 
+@@ -86,6 +90,27 @@ private:
+     std::packaged_task<void()> reset_task_;
+ 
+     Pose last_phys_pose_; //for trace lines showing vehicle path
++
++    //Stamped poses from an external simulator (GazeboDrone sends Gazebo sim time): the physics body, so the
++    //sensors, takes each one at once; the pawn is drawn at a clock that follows the stamps evenly and a
++    //little behind, because the samples arrive in bursts (0-6 per frame) and drawing the newest stutters.
++    struct PoseSample
++    {
++        double stamp;
++        Pose pose;
++    };
++    void applyPose(const Pose& pose, bool ignore_collision);
++    bool hasPoseStream() const;
++    bool getRenderPose(float dt, Pose& pose);
++    mutable std::mutex pose_samples_mutex_;
++    std::deque<PoseSample> pose_samples_;
++    double pose_sample_arrival_ = 0; //wall time of the newest sample
++    float render_delay_ = 0.025f; //settings "ExternalPoseRenderDelay" (s); 0 draws the newest pose
++    bool render_clock_valid_ = false;
++    double render_time_ = 0; //stamp drawn this frame
++    double render_prev_newest_ = 0;
++    double render_source_rate_ = 1; //stamp seconds per frame second
++    double render_lead_ = 0; //newest stamp - render_time_, smoothed
+     std::vector<std::string> vehicle_api_messages_;
+     RotorStates rotor_states_;
+ };

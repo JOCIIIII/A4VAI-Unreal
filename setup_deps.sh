@@ -27,13 +27,20 @@ if [ ! -d "${COSYS}" ]; then
     mkdir -p "${DEPS_DIR}"
     git clone --depth 1 --branch ${COSYS_TAG} https://github.com/Cosys-Lab/Cosys-AirSim.git "${COSYS}"
 fi
-for p in "${HERE}"/patches/cosys-airsim/*.patch; do
-    if git -C "${COSYS}" apply --reverse --check "$p" 2>/dev/null; then
-        echo "already applied: $(basename "$p")"
-    else
+# A changed patch set puts the tracked files back to the tag and applies all patches again (later
+# patches may edit lines of earlier ones, so they cannot be checked one by one); downloads and build
+# outputs are untracked and stay.
+PATCHES=("${HERE}"/patches/cosys-airsim/*.patch)
+PATCH_ID=$(cat "${PATCHES[@]}" | sha1sum | cut -d' ' -f1)
+if [ "$(cat "${COSYS}/.ctrack-patches" 2>/dev/null)" = "${PATCH_ID}" ]; then
+    echo "patches already applied (${#PATCHES[@]})"
+else
+    git -C "${COSYS}" checkout -q -- .
+    for p in "${PATCHES[@]}"; do
         git -C "${COSYS}" apply "$p" && echo "applied: $(basename "$p")"
-    fi
-done
+    done
+    echo "${PATCH_ID}" > "${COSYS}/.ctrack-patches"
+fi
 
 # Same downloads as Cosys setup.sh, without its sudo apt-get
 cd "${COSYS}"

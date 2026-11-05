@@ -3,6 +3,8 @@
 #   ./run_unreal.sh [settings.json]   (default: settings/settings_gazebo.json)
 #   CTRACK_MAP=Yard ./run_unreal.sh   the SLAM yard instead of the C-Track field (default CTrack);
 #                                     a name in /Game/CTrack/Maps or a full map path (MAP also works)
+#   CTRACK_VSYNC=1 ./run_unreal.sh    pace frames to the display (VSync): unpaced frames (5-12 ms) shown on a
+#                                     60 Hz screen or in a screen recording make the motion judder
 # Uses the packaged build (no Unreal Engine install needed) when present:
 #   $CTRACK_PACKAGED, or packaged/CTrackSim-Linux/ (release asset, extracted here).
 # Otherwise runs the editor project with $UE_ROOT.
@@ -36,11 +38,13 @@ EOF
     SETTINGS="${FALLBACK}"
 fi
 
-echo "[run_unreal.sh] map ${MAP}"
+EXTRA=()
+[ "${CTRACK_VSYNC:-0}" = 1 ] && EXTRA+=("-ExecCmds=r.VSync 1")
+echo "[run_unreal.sh] map ${MAP}${EXTRA:+ (VSync)}"
 if [ "${MODE}" = packaged ]; then
     echo "[run_unreal.sh] packaged build: ${PACKAGED}"
     exec "${PACKAGED}/CTrackSim.sh" "${MAP}" \
-        -windowed -ResX=1280 -ResY=720 -settings="${SETTINGS}"
+        -windowed -ResX=1280 -ResY=720 -settings="${SETTINGS}" "${EXTRA[@]}"
 fi
 exec "${UE_ROOT}/Engine/Binaries/Linux/UnrealEditor" "${HERE}/CTrackSim/CTrackSim.uproject" "${MAP}" \
-    -game -windowed -ResX=1280 -ResY=720 -settings="${SETTINGS}"
+    -game -windowed -ResX=1280 -ResY=720 -settings="${SETTINGS}" "${EXTRA[@]}"
