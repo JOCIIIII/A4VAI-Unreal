@@ -1,8 +1,8 @@
 using UnrealBuildTool;
 
-public class CTrackSim : ModuleRules
+public class A4VAISIM : ModuleRules
 {
-	public CTrackSim(ReadOnlyTargetRules Target) : base(Target)
+	public A4VAISIM(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		bEnableExceptions = Target.Platform != UnrealTargetPlatform.Linux;

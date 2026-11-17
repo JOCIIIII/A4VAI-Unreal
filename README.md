@@ -1,4 +1,18 @@
-# C-Track Sim (UE 5.8.2 + Cosys-AirSim 3.5.0 + PX4 v1.16 / Gazebo Classic)
+# A4VAISIM (UE 5.8.2 + Cosys-AirSim 3.5.0 + PX4 v1.16 / Gazebo Classic)
+
+The Unreal project was called CTrackSim until 2026-11-17 (release `inhousesim-v1.0` still ships
+`CTrackSim-Linux.tar.gz`; `run_unreal.sh` runs those packaged builds too).
+
+On the lab PC this repository is `02_InhouseSim/00_Unreal/00_Map`, next to the other Unreal parts.
+The scripts use those folders when they are there; elsewhere set `UE_ROOT` / `DEPS_DIR` (defaults
+`~/Downloads/Linux_Unreal_Engine_5.8.2`, `~/Documents/InhouseSim-deps`).
+
+| folder | contents |
+|---|---|
+| `00_Map` | this repository: the Unreal project `A4VAISIM` (maps), layouts, Gazebo side, AirSim settings, scripts |
+| `01_Cosys` | the `DEPS_DIR`: Cosys-AirSim 5.8-v3.5.0 source with `patches/cosys-airsim` applied (`cosys-airsim-3.5.0`) and its gcc copy for GazeboDrone (`cosys-airsim-3.5.0-gcc`); `setup_deps.sh` builds the plugin from it into `A4VAISIM/Plugins/AirSim` |
+| `02_Engine` | Unreal Engine 5.8.2 (`Linux_Unreal_Engine_5.8.2`, the `UE_ROOT`) |
+| `03_Dist` | packaged builds from `package.sh`, one folder per run: `release/` = the release files, `*-Linux/` = the runnable build (`CTRACK_PACKAGED`), `src/`, `out/` = packaging work folders; `package-v1.0` = release `inhousesim-v1.0` |
 
 Two maps, chosen with `CTRACK_MAP` (the same variable for Unreal, Gazebo and the map scripts):
 
@@ -21,7 +35,7 @@ layout/slam/yard_map_points.ply  the yard scan (10 cm voxels, levelling and fram
 layout/meshes/yard/              yard meshes: .obj for Gazebo, .glb for Unreal
 layout/ctrack_layout.json        C-Track: waypoints, obstacles, RC cart, wind zone
 layout/gen_gazebo_world.py       -> gazebo/worlds/ctrack.world (run by run_gazebo_px4.sh)
-CTrackSim/                       Unreal project (maps /Game/CTrack/Maps/CTrack, .../Yard)
+A4VAISIM/                        Unreal project (maps /Game/CTrack/Maps/CTrack, .../Yard)
   Scripts/create_base_map.py       empty map, lights, PlayerStart at Start H (run once)
   Scripts/build_map_from_layout.py ground + layout into the map (rerunnable)
   Scripts/make_s900_pawn.py        optional vehicle look (model not included, see below)
@@ -49,10 +63,10 @@ package.sh                       builds the release assets (packaged Unreal buil
 ## Setup without Unreal Engine (release build)
 Download from the GitHub release and extract in the repository root:
 ```bash
-mkdir -p packaged && tar -xzf CTrackSim-Linux.tar.gz -C packaged   # packaged/CTrackSim-Linux/
+mkdir -p packaged && tar -xzf A4VAISIM-Linux.tar.gz -C packaged   # packaged/A4VAISIM-Linux/
 tar -xzf ctrack-gazebo-prebuilt.tar.gz                              # gazebo/bin, gazebo/plugins/build
 ```
-`run_unreal.sh` then runs the packaged build (or set `CTRACK_PACKAGED=/path/to/CTrackSim-Linux`).
+`run_unreal.sh` then runs the packaged build (or set `CTRACK_PACKAGED=/path/to/A4VAISIM-Linux`).
 It uses Cosys-AirSim's default vehicle pawn. Instead of the prebuilt Gazebo binaries you can build
 them without Unreal Engine: `./setup_deps.sh --gazebo-only`.
 
@@ -60,8 +74,8 @@ them without Unreal Engine: `./setup_deps.sh --gazebo-only`.
 ```bash
 UE_ROOT=/path/to/Linux_Unreal_Engine_5.8.2 ./setup_deps.sh
 ```
-Clones Cosys-AirSim `5.8-v3.5.0` into `~/Documents/InhouseSim-deps` (`DEPS_DIR`), applies
-`patches/cosys-airsim`, builds AirLib with Unreal's bundled clang into `CTrackSim/Plugins/AirSim`
+Clones Cosys-AirSim `5.8-v3.5.0` into `DEPS_DIR` (`../01_Cosys` on the lab PC), applies
+`patches/cosys-airsim`, builds AirLib with Unreal's bundled clang into `A4VAISIM/Plugins/AirSim`
 and the editor target, builds AirLib with gcc + GazeboDrone in the PX4 dev image
 (`gazebo/bin/GazeboDrone`), and the Gazebo plugins (`gazebo/plugins/build`).
 `./package.sh` builds the release assets from a clean clone (see the script).
@@ -90,7 +104,7 @@ Settings (all: `RPLIDAR_A3` CPU lidar, 32 channels, 10 Hz, vertical FOV -7..52 d
 ## Lidar scan pattern (Livox Mid-360)
 With `"PatternFile"` the CPU lidar shoots a recorded shot sequence instead of its channel x
 measurement grid (patch `0004`; `NumberOfChannels`, `MeasurementsPerCycle`, `RotationsPerSecond`
-and the FOV keys are then ignored). `CTrackSim/Content/Lidar/mid360_pattern_2s.bin` is 2 s
+and the FOV keys are then ignored). `A4VAISIM/Content/Lidar/mid360_pattern_2s.bin` is 2 s
 (400 000 shots at 200 000/s, 4 lasers) recorded from a Mid-360 in its non-repetitive mode, every
 shot including those without a return.
 
@@ -117,7 +131,7 @@ keeps the order and the NaN points, converts to x forward, y left, z up (negates
 the PointCloud2 with `time_stamp` and marks it `is_dense: true` regardless.
 
 ## Vehicle look (S900) - not included
-The Gazebo settings use an S900 octocopter look built by `CTrackSim/Scripts/make_s900_pawn.py`
+The Gazebo settings use an S900 octocopter look built by `A4VAISIM/Scripts/make_s900_pawn.py`
 from a 3D model that may not be redistributed, so the model and its imported assets are not in
 this repository or the release build. Without them `run_unreal.sh` drops the pawn override and Cosys-AirSim uses its
 default multirotor pawn; physics, sensors and poses are unchanged (only the look differs).
@@ -178,9 +192,9 @@ are facades only (no roofs); a few merged trees are still one mesh each.
 To rebuild the yard map in Unreal (close Unreal first):
 ```bash
 export CTRACK_MAP=Yard
-UE=~/Downloads/Linux_Unreal_Engine_5.8.2/Engine/Binaries/Linux/UnrealEditor-Cmd
-$UE "$PWD/CTrackSim/CTrackSim.uproject" -run=pythonscript -script="$PWD/CTrackSim/Scripts/create_base_map.py" -nullrhi -unattended   # once
-$UE "$PWD/CTrackSim/CTrackSim.uproject" -run=pythonscript -script="$PWD/CTrackSim/Scripts/build_map_from_layout.py" -nullrhi -unattended
+UE=${UE_ROOT:-../02_Engine/Linux_Unreal_Engine_5.8.2}/Engine/Binaries/Linux/UnrealEditor-Cmd
+$UE "$PWD/A4VAISIM/A4VAISIM.uproject" -run=pythonscript -script="$PWD/A4VAISIM/Scripts/create_base_map.py" -nullrhi -unattended   # once
+$UE "$PWD/A4VAISIM/A4VAISIM.uproject" -run=pythonscript -script="$PWD/A4VAISIM/Scripts/build_map_from_layout.py" -nullrhi -unattended
 ```
 (`CTRACK_LAYOUT` overrides the layout file.) Flying in the yard: most trees are 4-5 m tall with the
 canopy bottom at 2-3 m, so fly at about 2 m to avoid between trunks; START is the scan origin,
@@ -200,9 +214,9 @@ Gazebo), and the RC cart at 3 m/s carrying a standing person (`unreal_mesh` SM_P
 
 After editing the layout, regenerate the Unreal map (close Unreal first; the commandlet saves it):
 ```bash
-UE=~/Downloads/Linux_Unreal_Engine_5.8.2
-$UE/Engine/Binaries/Linux/UnrealEditor-Cmd "$PWD/CTrackSim/CTrackSim.uproject" \
-    -run=pythonscript -script="$PWD/CTrackSim/Scripts/build_map_from_layout.py" -nullrhi -unattended
+UE=${UE_ROOT:-../02_Engine/Linux_Unreal_Engine_5.8.2}
+$UE/Engine/Binaries/Linux/UnrealEditor-Cmd "$PWD/A4VAISIM/A4VAISIM.uproject" \
+    -run=pythonscript -script="$PWD/A4VAISIM/Scripts/build_map_from_layout.py" -nullrhi -unattended
 ```
 Optional per obstacle: `z` (bottom height, default 0) and `visual: false` (hidden collider).
 The Gazebo world is regenerated on every `run_gazebo_px4.sh`.

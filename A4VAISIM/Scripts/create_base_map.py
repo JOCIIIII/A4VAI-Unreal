@@ -6,7 +6,7 @@ Field: 100 m x 50 m, X in [-5, 95] m, Y in [-12, 38] m. A lane at Y=0, C lane at
 Obstacles are added later from the shared obstacle definition (Unreal + Gazebo).
 
 Run headless:
-  UnrealEditor-Cmd CTrackSim.uproject -run=pythonscript -script=Scripts/create_base_map.py -nullrhi -unattended
+  UnrealEditor-Cmd A4VAISIM.uproject -run=pythonscript -script=Scripts/create_base_map.py -nullrhi -unattended
 """
 import os
 

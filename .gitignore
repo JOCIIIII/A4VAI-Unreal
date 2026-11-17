@@ -1,8 +1,8 @@
 # --- Confidential: DJI S900 vehicle model. Never commit (public repository). ---
 dji_s900_camera_drone.glb
 dji-s900-camera-drone/
-CTrackSim/Content/CTrack/Vehicles/S900/
-CTrackSim/Content/CTrack/Vehicles/BP_S900Pawn.uasset
+A4VAISIM/Content/CTrack/Vehicles/S900/
+A4VAISIM/Content/CTrack/Vehicles/BP_S900Pawn.uasset
 *.glb
 # ...except the SLAM yard meshes (our own, made by layout/slam_to_layout.py)
 !layout/meshes/**/*.glb
@@ -10,12 +10,12 @@ CTrackSim/Content/CTrack/Vehicles/BP_S900Pawn.uasset
 *.fbx
 
 # Unreal build output and caches
-CTrackSim/Binaries/
-CTrackSim/DerivedDataCache/
-CTrackSim/Intermediate/
-CTrackSim/Saved/
+A4VAISIM/Binaries/
+A4VAISIM/DerivedDataCache/
+A4VAISIM/Intermediate/
+A4VAISIM/Saved/
 # Cosys-AirSim plugin: rebuilt by setup_deps.sh from 5.8-v3.5.0 + patches/cosys-airsim
-CTrackSim/Plugins/
+A4VAISIM/Plugins/
 
 # Gazebo side: build output, binaries, generated world, logs
 gazebo/bin/

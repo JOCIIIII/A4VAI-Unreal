@@ -5,11 +5,11 @@ the same mesh spawned rotated.
 
   1. copy the template's Mannequins content in (NOT committed - only the converter needs it):
        cp -r $UE/Templates/TemplateResources/High/Characters/Content/Mannequins/{Meshes,Materials,Textures,Rigs} \\
-             CTrackSim/Content/Characters/Mannequins/
+             A4VAISIM/Content/Characters/Mannequins/
   2. run (Unreal closed; GeometryScripting is an editor plugin of the project):
-       $UE/Engine/Binaries/Linux/UnrealEditor-Cmd "$PWD/CTrackSim/CTrackSim.uproject" \\
-           -run=pythonscript -script="$PWD/CTrackSim/Scripts/make_people.py" -nullrhi -unattended
-  3. remove CTrackSim/Content/Characters again; the static meshes keep the project's own materials
+       $UE/Engine/Binaries/Linux/UnrealEditor-Cmd "$PWD/A4VAISIM/A4VAISIM.uproject" \\
+           -run=pythonscript -script="$PWD/A4VAISIM/Scripts/make_people.py" -nullrhi -unattended
+  3. remove A4VAISIM/Content/Characters again; the static meshes keep the project's own materials
      (Config/DefaultGame.ini cooks /Game/CTrack/People although no map places them)
 
 Meshes: SM_Person_Manny, SM_Person_Quinn (feet at the origin, about 1.8 / 1.7 m tall, X forward).

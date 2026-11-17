@@ -2,7 +2,7 @@
 """Check the lidar pattern mode (settings_gazebo_mid360.json) against the pattern file, vehicle at rest.
 
 Run with Unreal up on the C-Track map and no Gazebo (the vehicle pose is set through the API):
-  ./tools/check_mid360_pattern.py [--pattern CTrackSim/Content/Lidar/mid360_pattern_2s.bin] [--seconds 6]
+  ./tools/check_mid360_pattern.py [--pattern A4VAISIM/Content/Lidar/mid360_pattern_2s.bin] [--seconds 6]
 Checks: every output point lies on its pattern shot (order, direction and frame conversion), the
 pattern continues across frames, shots and sizes per frame, density per elevation band, 1x1 deg
 coverage, hits on a 0.1 m pole at 7 m with the sensor 1.5 m up (Pole_C1 scaled down, restored
@@ -42,7 +42,7 @@ def match_start(points, dirs):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pattern", default=os.path.join(HERE, "..", "CTrackSim", "Content", "Lidar", "mid360_pattern_2s.bin"))
+    ap.add_argument("--pattern", default=os.path.join(HERE, "..", "A4VAISIM", "Content", "Lidar", "mid360_pattern_2s.bin"))
     ap.add_argument("--seconds", type=float, default=6.0)
     args = ap.parse_args()
     dirs, az, el, pps = load_pattern(args.pattern)

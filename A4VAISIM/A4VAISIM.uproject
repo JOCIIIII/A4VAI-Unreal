@@ -5,7 +5,7 @@
 	"Description": "C-Track test field (A: path planning, B: wind disturbance, C: collision avoidance) for PX4 + Gazebo Classic + Cosys-AirSim",
 	"Modules": [
 		{
-			"Name": "CTrackSim",
+			"Name": "A4VAISIM",
 			"Type": "Runtime",
 			"LoadingPhase": "Default",
 			"AdditionalDependencies": [

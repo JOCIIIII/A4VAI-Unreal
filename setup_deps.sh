@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build everything this repo needs from Cosys-AirSim 5.8-v3.5.0 + patches/cosys-airsim/*.patch:
-#   1. AirLib with Unreal's bundled clang -> CTrackSim/Plugins/AirSim, CTrackSim editor build
+#   1. AirLib with Unreal's bundled clang -> A4VAISIM/Plugins/AirSim, A4VAISIM editor build
 #   2. AirLib with gcc + GazeboDrone (px4-dev-simulation-focal image) -> gazebo/bin/GazeboDrone
 #   3. Gazebo plugins -> gazebo/plugins/build
 # Needs: Unreal Engine 5.8.2 (UE_ROOT), docker with px4io/px4-dev-simulation-focal, git, wget, unzip.
@@ -10,8 +10,10 @@ set -e
 GAZEBO_ONLY=0
 [ "$1" = "--gazebo-only" ] && GAZEBO_ONLY=1
 HERE="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-UE_ROOT="${UE_ROOT:-$HOME/Downloads/Linux_Unreal_Engine_5.8.2}"
-DEPS_DIR="${DEPS_DIR:-$HOME/Documents/InhouseSim-deps}"
+# Lab PC layout: this repository is 00_Unreal/00_Map, next to 01_Cosys (Cosys-AirSim source), 02_Engine
+# (Unreal Engine) and 03_Dist (packaged builds); elsewhere ~/Downloads and ~/Documents/InhouseSim-deps.
+UE_ROOT="${UE_ROOT:-$(d="${HERE}/../02_Engine/Linux_Unreal_Engine_5.8.2"; [ -d "$d" ] && readlink -f "$d" || echo "$HOME/Downloads/Linux_Unreal_Engine_5.8.2")}"
+DEPS_DIR="${DEPS_DIR:-$(d="${HERE}/../01_Cosys"; [ -d "$d" ] && readlink -f "$d" || echo "$HOME/Documents/InhouseSim-deps")}"
 COSYS_TAG=5.8-v3.5.0
 COSYS="${DEPS_DIR}/cosys-airsim-3.5.0"
 COSYS_GCC="${DEPS_DIR}/cosys-airsim-3.5.0-gcc"
@@ -57,8 +59,8 @@ fi
 # 1. Unreal plugin (UE's clang + sysroot so the static libs link into the engine)
 if [ ${GAZEBO_ONLY} = 0 ]; then
     ./build.sh --ue-root "${UE_ROOT}"
-    COSYS_ROOT="${COSYS}" "${HERE}/CTrackSim/update_plugin.sh"
-    UE_ROOT="${UE_ROOT}" "${HERE}/CTrackSim/build_editor.sh"
+    COSYS_ROOT="${COSYS}" "${HERE}/A4VAISIM/update_plugin.sh"
+    UE_ROOT="${UE_ROOT}" "${HERE}/A4VAISIM/build_editor.sh"
 fi
 
 # 2. GazeboDrone (gcc AirLib, links against Gazebo 11 in the PX4 dev image)

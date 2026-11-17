@@ -23,7 +23,7 @@ A moving-obstacle part with "unreal_mesh" uses that static mesh (pivot at its fo
 of the box/cylinder, which stays the Gazebo collider.
 
 Run headless:
-  UnrealEditor-Cmd CTrackSim.uproject -run=pythonscript -script=Scripts/build_map_from_layout.py -nullrhi -unattended
+  UnrealEditor-Cmd A4VAISIM.uproject -run=pythonscript -script=Scripts/build_map_from_layout.py -nullrhi -unattended
 """
 import json
 import math

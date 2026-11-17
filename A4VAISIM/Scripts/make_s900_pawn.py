@@ -16,8 +16,8 @@ Then settings/settings_gazebo.json points the vehicle at it:
   "Vehicles": {"SimpleFlight": {..., "PawnPath": "S900"}}
 
 run (Unreal closed):
-  $UE/Engine/Binaries/Linux/UnrealEditor-Cmd "$PWD/CTrackSim/CTrackSim.uproject" \\
-      -run=pythonscript -script="$PWD/CTrackSim/Scripts/make_s900_pawn.py" -nullrhi -unattended
+  $UE/Engine/Binaries/Linux/UnrealEditor-Cmd "$PWD/A4VAISIM/A4VAISIM.uproject" \\
+      -run=pythonscript -script="$PWD/A4VAISIM/Scripts/make_s900_pawn.py" -nullrhi -unattended
 env: S900_GLB (default ../dji_s900_camera_drone.glb), S900_TIP_RADIUS_CM (77), S900_FEET_CM (-44),
      S900_YAW (degrees, default 0), S900_LOG (/tmp/ctrack/make_s900.txt)
 """

@@ -10,7 +10,7 @@
  * cameras see); the Gazebo collider stays upright.
  */
 UCLASS()
-class CTRACKSIM_API ACTrackSwayActor : public AActor
+class A4VAISIM_API ACTrackSwayActor : public AActor
 {
 	GENERATED_BODY()
 

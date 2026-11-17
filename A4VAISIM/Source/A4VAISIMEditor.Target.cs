@@ -1,13 +1,13 @@
 using UnrealBuildTool;
 using System.Collections.Generic;
 
-public class CTrackSimEditorTarget : TargetRules
+public class A4VAISIMEditorTarget : TargetRules
 {
-	public CTrackSimEditorTarget(TargetInfo Target) : base(Target)
+	public A4VAISIMEditorTarget(TargetInfo Target) : base(Target)
 	{
 		DefaultBuildSettings = BuildSettingsVersion.V7;
 		Type = TargetType.Editor;
-		ExtraModuleNames.AddRange(new string[] { "CTrackSim" });
+		ExtraModuleNames.AddRange(new string[] { "A4VAISIM" });
 		IncludeOrderVersion = EngineIncludeOrderVersion.Latest;
 	}
 }

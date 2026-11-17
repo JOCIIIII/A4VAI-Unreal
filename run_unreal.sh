@@ -6,16 +6,26 @@
 #   CTRACK_VSYNC=1 ./run_unreal.sh    pace frames to the display (VSync): unpaced frames (5-12 ms) shown on a
 #                                     60 Hz screen or in a screen recording make the motion judder
 # Uses the packaged build (no Unreal Engine install needed) when present:
-#   $CTRACK_PACKAGED, or packaged/CTrackSim-Linux/ (release asset, extracted here).
+#   $CTRACK_PACKAGED, or packaged/A4VAISIM-Linux/ (release asset, extracted here).
+#   Builds packaged before the rename (CTrackSim-Linux/CTrackSim.sh, e.g. the inhousesim-v1.0 release)
+#   still work, either as $CTRACK_PACKAGED or as packaged/CTrackSim-Linux/.
 # Otherwise runs the editor project with $UE_ROOT.
 HERE="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-UE_ROOT="${UE_ROOT:-$HOME/Downloads/Linux_Unreal_Engine_5.8.2}"
-PACKAGED="${CTRACK_PACKAGED:-${HERE}/packaged/CTrackSim-Linux}"
+# Lab PC layout: this repository is 00_Unreal/00_Map, next to 01_Cosys (Cosys-AirSim source), 02_Engine
+# (Unreal Engine) and 03_Dist (packaged builds); elsewhere ~/Downloads and ~/Documents/InhouseSim-deps.
+UE_ROOT="${UE_ROOT:-$(d="${HERE}/../02_Engine/Linux_Unreal_Engine_5.8.2"; [ -d "$d" ] && readlink -f "$d" || echo "$HOME/Downloads/Linux_Unreal_Engine_5.8.2")}"
+PACKAGED="${CTRACK_PACKAGED:-${HERE}/packaged/A4VAISIM-Linux}"
+[ -z "${CTRACK_PACKAGED:-}" ] && [ ! -d "${PACKAGED}" ] && [ -d "${HERE}/packaged/CTrackSim-Linux" ] \
+    && PACKAGED="${HERE}/packaged/CTrackSim-Linux"
 MAP="${CTRACK_MAP:-${MAP:-CTrack}}"
 [[ "${MAP}" == /* ]] || MAP="/Game/CTrack/Maps/${MAP}"
 SETTINGS="$(readlink -f "${1:-${HERE}/settings/settings_gazebo.json}")"
 
-if [ -x "${PACKAGED}/CTrackSim.sh" ]; then
+LAUNCHER=""
+for name in A4VAISIM CTrackSim; do
+    [ -x "${PACKAGED}/${name}.sh" ] && { LAUNCHER="${PACKAGED}/${name}.sh"; break; }
+done
+if [ -n "${LAUNCHER}" ]; then
     MODE=packaged
 else
     MODE=editor
@@ -23,7 +33,7 @@ fi
 
 # The S900 vehicle look is not in the public repository or the packaged build. Without it, drop
 # the pawn override so Cosys-AirSim uses its default multirotor pawn (sensors and physics unchanged).
-if { [ "${MODE}" = packaged ] || [ ! -f "${HERE}/CTrackSim/Content/CTrack/Vehicles/BP_S900Pawn.uasset" ]; } \
+if { [ "${MODE}" = packaged ] || [ ! -f "${HERE}/A4VAISIM/Content/CTrack/Vehicles/BP_S900Pawn.uasset" ]; } \
         && grep -q "BP_S900Pawn" "${SETTINGS}"; then
     FALLBACK="${TMPDIR:-/tmp}/ctrack_settings_default_pawn.json"
     python3 - "${SETTINGS}" "${FALLBACK}" <<'EOF'
@@ -43,8 +53,8 @@ EXTRA=()
 echo "[run_unreal.sh] map ${MAP}${EXTRA:+ (VSync)}"
 if [ "${MODE}" = packaged ]; then
     echo "[run_unreal.sh] packaged build: ${PACKAGED}"
-    exec "${PACKAGED}/CTrackSim.sh" "${MAP}" \
+    exec "${LAUNCHER}" "${MAP}" \
         -windowed -ResX=1280 -ResY=720 -settings="${SETTINGS}" "${EXTRA[@]}"
 fi
-exec "${UE_ROOT}/Engine/Binaries/Linux/UnrealEditor" "${HERE}/CTrackSim/CTrackSim.uproject" "${MAP}" \
+exec "${UE_ROOT}/Engine/Binaries/Linux/UnrealEditor" "${HERE}/A4VAISIM/A4VAISIM.uproject" "${MAP}" \
     -game -windowed -ResX=1280 -ResY=720 -settings="${SETTINGS}" "${EXTRA[@]}"

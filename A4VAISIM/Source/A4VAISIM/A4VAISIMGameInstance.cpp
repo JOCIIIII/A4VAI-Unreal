@@ -1,11 +1,11 @@
-#include "CTrackSimGameInstance.h"
+#include "A4VAISIMGameInstance.h"
 
 #include "GameMapsSettings.h"
 #include "Misc/CommandLine.h"
 #include "Misc/PackageName.h"
 #include "Misc/Parse.h"
 
-void UCTrackSimGameInstance::StartGameInstance()
+void UA4VAISIMGameInstance::StartGameInstance()
 {
 #if UE_BUILD_SHIPPING
 	FString Map;
@@ -16,7 +16,7 @@ void UCTrackSimGameInstance::StartGameInstance()
 			UGameMapsSettings::SetGameDefaultMap(Map);
 		}
 		else {
-			UE_LOG(LogTemp, Warning, TEXT("CTrackSim: map %s not found, starting on the default map"), *Map);
+			UE_LOG(LogTemp, Warning, TEXT("A4VAISIM: map %s not found, starting on the default map"), *Map);
 		}
 	}
 #endif
