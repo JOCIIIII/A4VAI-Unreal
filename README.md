@@ -208,9 +208,10 @@ Unpaced frames (here 5-12 ms) shown on a 60 Hz screen or captured by a recorder 
 measured (`assumed`). It follows the final demo scenario (workshop material v0.06, 2026-11-03):
 a 9 m plywood wall across the C lane, five poles in an X (X 66 / 56 / 46, 6 m apart across; 30 mm,
 the real diameter: the lidar returns only a few points per scan from them), a 4 m balloon figure with
-two 1.2 m arms on the lane whose top sways +-0.3 m at 1 Hz in Unreal (`sway`, `arms`; upright in
-Gazebo), and the RC cart at 3 m/s carrying a standing person (`unreal_mesh` SM_Person_Manny; a
-0.5 x 0.4 x 1.8 m box in Gazebo).
+two 1.2 m arms on the lane (from 2.0 m at the body down to 1.5 m at the tips, across the flight
+height) whose top sways +-0.3 m at 1 Hz in Unreal (`sway`, `arms`; upright in Gazebo), and the RC cart
+at 3 m/s carrying a standing person (`unreal_mesh` SM_Person_Manny; a 0.5 x 0.4 x 1.8 m box in
+Gazebo), shuttling across the lane from the start of the simulation.
 
 After editing the layout, regenerate the Unreal map (close Unreal first; the commandlet saves it):
 ```bash
@@ -225,8 +226,10 @@ The Gazebo world is regenerated on every `run_gazebo_px4.sh`.
 - `libctrack_wind_zone.so`: inside the box, drag F = 0.5 rho CdA |v_rel| v_rel on the vehicle
   (v_rel = wind - vehicle velocity). The PX4 x8 motor models have `enable_wind` off, so the stock
   `windy.world` wind does not act on the x8.
-- `libctrack_moving_obstacle.so`: shuttles a kinematic model between two points; starts when the
-  trigger model comes within `trigger_distance` of `trigger_point`.
+- `libctrack_moving_obstacle.so`: shuttles a kinematic model between two points, from the start of the
+  simulation or, with `trigger_model`, once that model comes within `trigger_distance` of
+  `trigger_point` (the C-Track cart had that trigger until 2026-11-17). It logs
+  `[<name>_motion] started at t=<sim time>` in gzserver.log; the clearance tools place the cart from it.
 
 ## Patches to Cosys-AirSim 5.8-v3.5.0
 - `0001` lidar: `DrawDebugPoints` drew from AirSim's physics thread, which asserts in UE 5.8;
