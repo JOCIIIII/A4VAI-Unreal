@@ -135,8 +135,8 @@ The Gazebo settings use an S900 octocopter look built by `A4VAISIM/Scripts/make_
 from a 3D model that may not be redistributed, so the model and its imported assets are not in
 this repository or the release build. Without them `run_unreal.sh` drops the pawn override and Cosys-AirSim uses its
 default multirotor pawn; physics, sensors and poses are unchanged (only the look differs).
-Note for the S900 pawn: its mesh has no collision, since the Cosys 3.5 lidar does not skip its own
-vehicle and the -7 deg beams would hit the prop tips.
+The lidar skips its own vehicle (patch `0008`), so neither pawn shows up in the point cloud, also with a
+low mount such as the X500's 0.1 m. (The S900 mesh has no collision anyway; before `0008` it had to.)
 
 ## Frames
 Track frame (meters): origin = Start helipad, +X along the 100 m side, +Y toward the C lane, +Z up.
@@ -255,6 +255,10 @@ The Gazebo world is regenerated on every `run_gazebo_px4.sh`.
   vehicle poses. The pawn is drawn on a clock that follows the stamps evenly, 25 ms behind (settings
   `"ExternalPoseRenderDelay"`, s; 0 draws the newest pose): per-frame motion +-2%. The physics body, so the
   lidar/IMU, and `simGetVehiclePose` keep the newest pose. The camera director ticks after the sim mode.
+- `0008` lidar: the traces skip the own vehicle (both the rotating scan and the pattern mode). Cosys 3.5
+  ignored nothing, so with the default pawn a mount 0.1 m above the centre (X500) saw its own props at
+  0.2-0.5 m and the avoidance never left the start (packaged build, 2026-10-31); measured with the vehicle
+  lifted 2 m, returns within 1 m of the sensor went from 1680 in 8 frames to 0.
 
 ## Known issues
 - GazeboDrone sometimes connected to AirSim but never received a Gazebo pose (lidar kept publishing

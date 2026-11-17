@@ -1,0 +1,20 @@
+diff --git a/Unreal/Plugins/AirSim/Source/UnrealSensors/UnrealLidarSensor.cpp b/Unreal/Plugins/AirSim/Source/UnrealSensors/UnrealLidarSensor.cpp
+--- a/Unreal/Plugins/AirSim/Source/UnrealSensors/UnrealLidarSensor.cpp
++++ b/Unreal/Plugins/AirSim/Source/UnrealSensors/UnrealLidarSensor.cpp
+@@ -372,6 +372,7 @@
+ 			const Vector3r dir_world = VectorMath::rotateVector(dir, sensor_to_world, true);
+ 			FHitResult hit(ForceInit);
+ 			TArray<AActor*> ignore;
++			ignore.Add(actor_);                     // not the own vehicle (body, props)
+ 			const bool is_hit = UAirBlueprintLib::GetObstacleAdv(actor_, trace_start, to_unreal(start + dir_world * params.range),
+ 				hit, ignore, ECC_Visibility, true, true);
+ 			const bool ignored = hit.PhysMaterial != nullptr &&
+@@ -456,7 +457,7 @@
+ 
+ 	FHitResult hit_result = FHitResult(ForceInit);
+ 	TArray<AActor*> actorArray;
+-	//actorArray.Add(actor_);
++	actorArray.Add(actor_);                         // not the own vehicle (body, props)
+ 	bool is_hit;
+ 	if (params.external) {
+ 		is_hit = UAirBlueprintLib::GetObstacleAdv(actor_, ned_transform_->toFVector(start, 100, true), ned_transform_->toFVector(end, 100, true), hit_result, actorArray, ECC_Visibility, true, true);
