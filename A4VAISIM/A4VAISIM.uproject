@@ -2,7 +2,7 @@
 	"FileVersion": 3,
 	"EngineAssociation": "5.8",
 	"Category": "",
-	"Description": "C-Track test field (A: path planning, B: wind disturbance, C: collision avoidance) for PX4 + Gazebo Classic + Cosys-AirSim",
+	"Description": "Demonstration scenario test map (A: path planning, B: wind disturbance, C: collision avoidance) for PX4 + Gazebo Classic + Cosys-AirSim",
 	"Modules": [
 		{
 			"Name": "A4VAISIM",

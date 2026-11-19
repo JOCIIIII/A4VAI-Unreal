@@ -3,7 +3,7 @@
 // trigger_point (or of the travel segment if no point is given), so the crossing happens
 // when the vehicle approaches.
 //
-// <plugin name="cart" filename="libctrack_moving_obstacle.so">
+// <plugin name="cart" filename="libscenario_moving_obstacle.so">
 //   <model>RCCart_C</model>
 //   <start>39 -33 0</start> <end>39 -18.5 0</end>   world ENU [m]
 //   <speed>1.0</speed>                              [m/s]

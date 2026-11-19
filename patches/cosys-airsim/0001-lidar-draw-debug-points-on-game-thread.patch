@@ -27,7 +27,7 @@ index 063606b..da9fa72 100755
 +		// Drawn on the game thread: this runs on AirSim's physics thread (World::worldUpdatorAsync),
 +		// and a line batcher marked dirty from there while the game thread sends its end-of-frame
 +		// updates trips UE 5.8's check(!bPostTickComponentUpdate) (LevelTick.cpp) - it crashed
-+		// CTrackSim in flight. Only hits: misses stay FVector() and were drawn at the world origin.
++		// A4VAISIM in flight. Only hits: misses stay FVector() and were drawn at the world origin.
 +		// Each call scans a slice of the sweep; one rotation's lifetime keeps the whole sweep shown.
 +		TArray<FVector> hits;
 +		hits.Reserve(point_cloud_draw_.size());

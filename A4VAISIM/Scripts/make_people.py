@@ -1,4 +1,4 @@
-"""People for search missions: UE5's template mannequins (Manny, Quinn) as STATIC meshes in /Game/CTrack/People,
+"""People for search missions: UE5's template mannequins (Manny, Quinn) as STATIC meshes in /Game/Scenario/People,
 so Cosys-AirSim can spawn them anywhere at runtime (simSpawnObject spawns static meshes by name; simListAssets
 lists them) and the lidar sees them (complex-as-simple collision). Standing = the reference pose; a lying person is
 the same mesh spawned rotated.
@@ -10,22 +10,22 @@ the same mesh spawned rotated.
        $UE/Engine/Binaries/Linux/UnrealEditor-Cmd "$PWD/A4VAISIM/A4VAISIM.uproject" \\
            -run=pythonscript -script="$PWD/A4VAISIM/Scripts/make_people.py" -nullrhi -unattended
   3. remove A4VAISIM/Content/Characters again; the static meshes keep the project's own materials
-     (Config/DefaultGame.ini cooks /Game/CTrack/People although no map places them)
+     (Config/DefaultGame.ini cooks /Game/Scenario/People although no map places them)
 
 Meshes: SM_Person_Manny, SM_Person_Quinn (feet at the origin, about 1.8 / 1.7 m tall, X forward).
-env: PEOPLE_LOG (default /tmp/ctrack/make_people.txt)
+env: PEOPLE_LOG (default /tmp/scenario/make_people.txt)
 """
 import os
 
 import unreal
 
-LOG = os.environ.get('PEOPLE_LOG', '/tmp/ctrack/make_people.txt')
-DST = '/Game/CTrack/People'
+LOG = os.environ.get('PEOPLE_LOG', '/tmp/scenario/make_people.txt')
+DST = '/Game/Scenario/People'
 SOURCES = {'SM_Person_Manny': '/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple',
            'SM_Person_Quinn': '/Game/Characters/Mannequins/Meshes/SKM_Quinn_Simple'}
 # clothes-like colours from the project's own material instances (no template textures in the build)
-MATERIALS = {'SM_Person_Manny': ['/Game/CTrack/Materials/MI_blue', '/Game/CTrack/Materials/MI_gray'],
-             'SM_Person_Quinn': ['/Game/CTrack/Materials/MI_brown', '/Game/CTrack/Materials/MI_gray']}
+MATERIALS = {'SM_Person_Manny': ['/Game/Scenario/Materials/MI_blue', '/Game/Scenario/Materials/MI_gray'],
+             'SM_Person_Quinn': ['/Game/Scenario/Materials/MI_brown', '/Game/Scenario/Materials/MI_gray']}
 
 os.makedirs(os.path.dirname(LOG), exist_ok=True)
 log = open(LOG, 'w')

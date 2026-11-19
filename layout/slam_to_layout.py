@@ -26,7 +26,7 @@ blend ring): START at the ground plane level, the others at their median relief 
   slam_to_layout.py map_points.ply out.json [--start X Y] [--goal X Y] [--preview out.png]
                     [--meshes DIR] [--collision mesh|primitive] [--pad-radius R] [--only-ground]
 Frames: --start/--goal and the preview are in the SLAM frame (as map.png: origin = where SLAM was
-started, right-handed, Z levelled). The layout is in the track frame of ctrack_layout.json, which
+started, right-handed, Z levelled). The layout is in the track frame of scenario_layout.json, which
 is left-handed like Unreal: X = SLAM x, Y = -SLAM y (so Gazebo ENU = the SLAM frame).
 """
 import os

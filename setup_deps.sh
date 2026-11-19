@@ -34,14 +34,14 @@ fi
 # outputs are untracked and stay.
 PATCHES=("${HERE}"/patches/cosys-airsim/*.patch)
 PATCH_ID=$(cat "${PATCHES[@]}" | sha1sum | cut -d' ' -f1)
-if [ "$(cat "${COSYS}/.ctrack-patches" 2>/dev/null)" = "${PATCH_ID}" ]; then
+if [ "$(cat "${COSYS}/.scenario-patches" 2>/dev/null)" = "${PATCH_ID}" ]; then
     echo "patches already applied (${#PATCHES[@]})"
 else
     git -C "${COSYS}" checkout -q -- .
     for p in "${PATCHES[@]}"; do
         git -C "${COSYS}" apply "$p" && echo "applied: $(basename "$p")"
     done
-    echo "${PATCH_ID}" > "${COSYS}/.ctrack-patches"
+    echo "${PATCH_ID}" > "${COSYS}/.scenario-patches"
 fi
 
 # Same downloads as Cosys setup.sh, without its sudo apt-get

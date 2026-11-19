@@ -2,7 +2,7 @@
 Cosys-AirSim's flying pawn. Only the look changes - the vehicle is still Gazebo's X8, Unreal just
 draws it at Gazebo's pose (ExternalPhysicsEngine).
 
-  1. imports the GLB into /Game/CTrack/Vehicles/S900 as ONE static mesh (Interchange, combine
+  1. imports the GLB into /Game/Scenario/Vehicles/S900 as ONE static mesh (Interchange, combine
      all), and once more as separate parts into a temporary folder to measure the model
   2. BP_S900Pawn = copy of /AirSim/Blueprints/BP_FlyingPawn, its root BodyMesh emptied and the
      S900 mesh added under it as S900Mesh (the root's own transform is the vehicle pose), scaled
@@ -12,14 +12,14 @@ draws it at Gazebo's pose (ExternalPhysicsEngine).
      quad's four propellers hidden (Rotation0..3 and the cameras stay - AirSim looks them up)
 
 Then settings/settings_gazebo.json points the vehicle at it:
-  "PawnPaths": {"S900": {"PawnBP": "Class'/Game/CTrack/Vehicles/BP_S900Pawn.BP_S900Pawn_C'"}},
+  "PawnPaths": {"S900": {"PawnBP": "Class'/Game/Scenario/Vehicles/BP_S900Pawn.BP_S900Pawn_C'"}},
   "Vehicles": {"SimpleFlight": {..., "PawnPath": "S900"}}
 
 run (Unreal closed):
   $UE/Engine/Binaries/Linux/UnrealEditor-Cmd "$PWD/A4VAISIM/A4VAISIM.uproject" \\
       -run=pythonscript -script="$PWD/A4VAISIM/Scripts/make_s900_pawn.py" -nullrhi -unattended
 env: S900_GLB (default ../dji_s900_camera_drone.glb), S900_TIP_RADIUS_CM (77), S900_FEET_CM (-44),
-     S900_YAW (degrees, default 0), S900_LOG (/tmp/ctrack/make_s900.txt)
+     S900_YAW (degrees, default 0), S900_LOG (/tmp/scenario/make_s900.txt)
 """
 import math
 import os
@@ -28,12 +28,12 @@ import unreal
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GLB = os.environ.get('S900_GLB', os.path.normpath(os.path.join(HERE, '..', '..', 'dji_s900_camera_drone.glb')))
-DST = '/Game/CTrack/Vehicles/S900'
-TMP = '/Game/CTrack/Vehicles/S900_parts_tmp'
-BP_PATH = '/Game/CTrack/Vehicles/BP_S900Pawn'
+DST = '/Game/Scenario/Vehicles/S900'
+TMP = '/Game/Scenario/Vehicles/S900_parts_tmp'
+BP_PATH = '/Game/Scenario/Vehicles/BP_S900Pawn'
 TIP_CM = float(os.environ.get('S900_TIP_RADIUS_CM', '77'))
 FEET_CM = float(os.environ.get('S900_FEET_CM', '-44'))
-LOG = os.environ.get('S900_LOG', '/tmp/ctrack/make_s900.txt')
+LOG = os.environ.get('S900_LOG', '/tmp/scenario/make_s900.txt')
 
 eal = unreal.EditorAssetLibrary
 os.makedirs(os.path.dirname(LOG), exist_ok=True)

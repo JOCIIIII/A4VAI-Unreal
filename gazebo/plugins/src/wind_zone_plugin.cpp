@@ -3,7 +3,7 @@
 // wind: F = 0.5 * rho * CdA * |v_rel| * v_rel, v_rel = wind - link velocity (world frame).
 // Works with any vehicle model: no change to the model SDF, motor-model wind stays untouched.
 //
-// <plugin name="wind_b" filename="libctrack_wind_zone.so">
+// <plugin name="wind_b" filename="libscenario_wind_zone.so">
 //   <model>x8</model>              vehicle model (spawned later is fine)
 //   <link></link>                  optional, default canonical link
 //   <min>69 -23 0</min> <max>89 -3 10</max>   zone box, world ENU [m]

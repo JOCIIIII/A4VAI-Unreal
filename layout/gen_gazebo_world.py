@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Generate the Gazebo Classic world from a layout (default ctrack_layout.json; yard_slam_layout.json for the yard).
+"""Generate the Gazebo Classic world from a layout (default scenario_layout.json; yard_slam_layout.json for the yard).
 
-Track frame -> Gazebo ENU: x = X, y = -Y, z = Z, yaw = -yaw (see ctrack_layout.json).
+Track frame -> Gazebo ENU: x = X, y = -Y, z = Z, yaw = -yaw (see scenario_layout.json).
 Spawn the vehicle at the Start helipad (Gazebo origin) facing +x so the AirSim view
 (fed by GazeboDrone) lines up with the Unreal map.
 
-Usage: ./gen_gazebo_world.py [-o worlds/ctrack.world]
+Usage: ./gen_gazebo_world.py [-o worlds/scenario.world]
 """
 import argparse
 import json
@@ -148,7 +148,7 @@ def static_model(name, shape, size, color, x, y, yaw_deg=0.0, collision=True, z=
 
 def moving_model(m):
     # Kinematic link with gravity off, model origin on the ground: moved by the
-    # libctrack_moving_obstacle plugin and mirrored to Unreal by GazeboDrone.
+    # libscenario_moving_obstacle plugin and mirrored to Unreal by GazeboDrone.
     parts = []
     for p in m["parts"]:
         ox, oy, oz = p["offset"]
@@ -179,7 +179,7 @@ def moving_plugin(m):
                 f"\n      <trigger_distance>{m.get('trigger_distance', 10.0)}</trigger_distance>")
         if m.get("trigger_point"):
             trig += f"\n      <trigger_point>{vec_gz(*m['trigger_point'])}</trigger_point>"
-    return f"""    <plugin name='{m['name']}_motion' filename='libctrack_moving_obstacle.so'>
+    return f"""    <plugin name='{m['name']}_motion' filename='libscenario_moving_obstacle.so'>
       <model>{m['name']}</model>
       <start>{vec_gz(sx, sy)}</start>
       <end>{vec_gz(ex, ey)}</end>
@@ -191,7 +191,7 @@ def moving_plugin(m):
 def wind_plugin(wz):
     (x0, x1), (y0, y1), (z0, z1) = wz["x_range"], wz["y_range"], wz["z_range"]
     dx, dy, dz = (c * wz["speed_mps"] for c in wz["direction"])
-    return f"""    <plugin name='{wz['name']}' filename='libctrack_wind_zone.so'>
+    return f"""    <plugin name='{wz['name']}' filename='libscenario_wind_zone.so'>
       <model>{wz.get('vehicle_model', 'x8')}</model>
       <min>{x0:.3f} {-y1:.3f} {z0:.3f}</min>
       <max>{x1:.3f} {-y0:.3f} {z1:.3f}</max>
@@ -202,8 +202,8 @@ def wind_plugin(wz):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("-l", "--layout", default=os.path.join(HERE, "ctrack_layout.json"))
-    ap.add_argument("-o", "--output", default=os.path.join(HERE, "..", "gazebo", "worlds", "ctrack.world"))
+    ap.add_argument("-l", "--layout", default=os.path.join(HERE, "scenario_layout.json"))
+    ap.add_argument("-o", "--output", default=os.path.join(HERE, "..", "gazebo", "worlds", "scenario.world"))
     ap.add_argument("--mesh-root", help="where the layout's directory is seen by gzserver "
                     "(default: its host path); mesh files are relative to it")
     args = ap.parse_args()
@@ -256,7 +256,7 @@ def main():
     with open(args.output, "w") as f:
         f.write(world)
     # heights of a ground relief collider next to the world (<world>.ground.json), so that
-    # ctrack_sitl_entry.sh spawns the vehicle on it; removed for flat-ground layouts
+    # scenario_sitl_entry.sh spawns the vehicle on it; removed for flat-ground layouts
     ground = os.path.splitext(args.output)[0] + ".ground.json"
     relief = [m for m in lay.get("meshes", []) if m.get("collision") and m.get("heightmap")]
     if relief:

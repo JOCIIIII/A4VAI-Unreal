@@ -2,7 +2,7 @@
 # Build the release assets from a clean clone of this repository (so nothing outside git, e.g.
 # the S900 model, can end up in the build):
 #   A4VAISIM-Linux.tar.gz        packaged Unreal build (Shipping, without .debug files)
-#   ctrack-gazebo-prebuilt.tar.gz GazeboDrone + Gazebo plugins (px4-dev-simulation-focal)
+#   scenario-gazebo-prebuilt.tar.gz GazeboDrone + Gazebo plugins (px4-dev-simulation-focal)
 #   UE_ROOT=... ./package.sh [git ref, default HEAD]   -> $OUT (default $WORK/release; WORK = 00_Unreal/03_Dist/package
 #   on the lab PC, else ~/Documents/InhouseSim-deps/package)
 set -e
@@ -33,6 +33,6 @@ if find "${WORK}/A4VAISIM-Linux" -type f -print0 | xargs -0 strings -n 5 | grep 
     echo "S900 content found in the packaged build - not packing"; exit 1
 fi
 tar -C "${WORK}" -czf "${OUT}/A4VAISIM-Linux.tar.gz" A4VAISIM-Linux
-tar -C "${WORK}/src" -czf "${OUT}/ctrack-gazebo-prebuilt.tar.gz" gazebo/bin/GazeboDrone \
-    gazebo/plugins/build/libctrack_wind_zone.so gazebo/plugins/build/libctrack_moving_obstacle.so
-(cd "${OUT}" && sha256sum A4VAISIM-Linux.tar.gz ctrack-gazebo-prebuilt.tar.gz | tee SHA256SUMS)
+tar -C "${WORK}/src" -czf "${OUT}/scenario-gazebo-prebuilt.tar.gz" gazebo/bin/GazeboDrone \
+    gazebo/plugins/build/libscenario_wind_zone.so gazebo/plugins/build/libscenario_moving_obstacle.so
+(cd "${OUT}" && sha256sum A4VAISIM-Linux.tar.gz scenario-gazebo-prebuilt.tar.gz | tee SHA256SUMS)

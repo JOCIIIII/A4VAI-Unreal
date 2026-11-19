@@ -1,4 +1,4 @@
-"""Create an empty base map: CTRACK_MAP (default CTrack; the yard: Yard), a name in /Game/CTrack/Maps or a full path.
+"""Create an empty base map: SCENARIO_MAP (default Scenario; the yard: Yard), a name in /Game/Scenario/Maps or a full path.
 
 Frame: Unreal world origin = Start helipad (H). +X along the 100 m track direction
 (left->right in the layout drawing), +Y toward the C (collision avoidance) lane, +Z up.
@@ -12,9 +12,9 @@ import os
 
 import unreal
 
-MAP_PATH = os.environ.get("CTRACK_MAP", "CTrack")
+MAP_PATH = os.environ.get("SCENARIO_MAP", "Scenario")
 if not MAP_PATH.startswith("/"):
-    MAP_PATH = "/Game/CTrack/Maps/" + MAP_PATH
+    MAP_PATH = "/Game/Scenario/Maps/" + MAP_PATH
 M = 100.0  # Unreal units (cm) per meter
 
 FIELD_X = (-5.0, 95.0)

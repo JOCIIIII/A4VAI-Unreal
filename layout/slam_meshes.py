@@ -4,7 +4,7 @@ voxel_mesh(): occupancy grid -> close/dilate/fill -> boundary quads -> Taubin sm
 Writers: OBJ (+MTL) for Gazebo, binary glTF (.glb) for Unreal (Interchange).
 
 Frames: meshes are built in the levelled SLAM frame, right-handed, Z up, metres. That is the
-Gazebo ENU frame of the layout (track frame = same X, Y mirrored; see ctrack_layout.json).
+Gazebo ENU frame of the layout (track frame = same X, Y mirrored; see scenario_layout.json).
 glTF is right-handed Y up, so the .glb gets (x, z, -y); Unreal's importer turns that into its
 own left-handed Z-up frame, which is the track frame.
 """

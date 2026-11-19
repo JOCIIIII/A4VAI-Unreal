@@ -1,8 +1,8 @@
-"""Place a layout into its map: by default ../../layout/ctrack_layout.json into /Game/CTrack/Maps/CTrack;
-CTRACK_MAP=Yard places the SLAM yard (yard_slam_layout.json) into /Game/CTrack/Maps/Yard (a name in
-/Game/CTrack/Maps or a full path). CTRACK_LAYOUT overrides the layout file.
+"""Place a layout into its map: by default ../../layout/scenario_layout.json into /Game/Scenario/Maps/Scenario;
+SCENARIO_MAP=Yard places the SLAM yard (yard_slam_layout.json) into /Game/Scenario/Maps/Yard (a name in
+/Game/Scenario/Maps or a full path). SCENARIO_LAYOUT overrides the layout file.
 
-Idempotent: actors tagged 'CTrackLayout' are deleted and re-spawned on every run.
+Idempotent: actors tagged 'ScenarioLayout' are deleted and re-spawned on every run.
 Track frame == Unreal frame relative to the Start helipad (PlayerStart, NED origin), meters -> cm.
 
 Moving obstacles: a mesh-less root actor named after the obstacle (e.g. RCCart_C) sits at the
@@ -10,12 +10,12 @@ ground point, like the Gazebo model origin; the parts are attached to it. Gazebo
 Gazebo model pose onto it by object name (simSetObjectPose).
 
 Meshes (layout "meshes", e.g. from slam_to_layout.py --meshes): each <file>.glb next to the layout
-is imported with Interchange into /Game/CTrack/Meshes/<map>/ and placed at the origin; with
+is imported with Interchange into /Game/Scenario/Meshes/<map>/ and placed at the origin; with
 "collision": true it uses its triangles as the collider (complex as simple), so the lidar sees
 the same surface. After the import the mesh bounds are checked against the layout's track-frame
 "bounds"; a mirrored or turned import is corrected on the actor and logged.
 Obstacles with "visual": false are spawned hidden (still colliding). An obstacle with "sway"
-({"top_amplitude_m", "freq_hz", "direction_deg"}) is attached to a CTrackSwayActor (<name>_Sway) at its
+({"top_amplitude_m", "freq_hz", "direction_deg"}) is attached to a ScenarioSwayActor (<name>_Sway) at its
 foot that tilts it, so its top sways (Unreal only; Gazebo keeps the upright collider). "arms"
 ({"shoulder_m", "length_m", "diameter_m", "up_deg", "direction_deg"}) adds two cylinders <name>_Arm1/2
 from the axis at shoulder height, up_deg above horizontal, along +-direction_deg; they sway with it.
@@ -32,19 +32,19 @@ import uuid
 
 import unreal
 
-# CTRACK_MAP / CTRACK_LAYOUT: build another map from another layout (e.g. a SLAM-derived one)
-MAP_PATH = os.environ.get("CTRACK_MAP", "CTrack")
+# SCENARIO_MAP / SCENARIO_LAYOUT: build another map from another layout (e.g. a SLAM-derived one)
+MAP_PATH = os.environ.get("SCENARIO_MAP", "Scenario")
 if not MAP_PATH.startswith("/"):
-    MAP_PATH = "/Game/CTrack/Maps/" + MAP_PATH
-MAT_DIR = "/Game/CTrack/Materials"
-BASE_MAT = f"{MAT_DIR}/M_CTrackColor"
-TAG = "CTrackLayout"
+    MAP_PATH = "/Game/Scenario/Maps/" + MAP_PATH
+MAT_DIR = "/Game/Scenario/Materials"
+BASE_MAT = f"{MAT_DIR}/M_ScenarioColor"
+TAG = "ScenarioLayout"
 M = 100.0
 
-_LAYOUTS = {"Yard": "yard_slam_layout.json", "CTrack": "ctrack_layout.json"}   # default layout per map
-LAYOUT = os.environ.get("CTRACK_LAYOUT") or os.path.join(
+_LAYOUTS = {"Yard": "yard_slam_layout.json", "Scenario": "scenario_layout.json"}   # default layout per map
+LAYOUT = os.environ.get("SCENARIO_LAYOUT") or os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "..", "layout",
-    _LAYOUTS.get(MAP_PATH.rstrip("/").split("/")[-1], "ctrack_layout.json"))
+    _LAYOUTS.get(MAP_PATH.rstrip("/").split("/")[-1], "scenario_layout.json"))
 
 COLORS = {
     "orange": (1.0, 0.45, 0.0),
@@ -70,7 +70,7 @@ actor_sub = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
 def base_material():
     if eal.does_asset_exist(BASE_MAT):
         return unreal.load_asset(BASE_MAT)
-    mat = asset_tools.create_asset("M_CTrackColor", MAT_DIR, unreal.Material, unreal.MaterialFactoryNew())
+    mat = asset_tools.create_asset("M_ScenarioColor", MAT_DIR, unreal.Material, unreal.MaterialFactoryNew())
     param = mel.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -300, 0)
     param.set_editor_property("parameter_name", "Color")
     param.set_editor_property("default_value", unreal.LinearColor(0.5, 0.5, 0.5, 1.0))
@@ -83,7 +83,7 @@ def base_material():
     return mat
 
 
-DIRT_MAT = f"{MAT_DIR}/M_CTrackDirt"
+DIRT_MAT = f"{MAT_DIR}/M_ScenarioDirt"
 
 
 def dirt_material():
@@ -91,7 +91,7 @@ def dirt_material():
     dark and light soil browns; rough, no texture assets needed."""
     if eal.does_asset_exist(DIRT_MAT):
         return unreal.load_asset(DIRT_MAT)
-    mat = asset_tools.create_asset("M_CTrackDirt", MAT_DIR, unreal.Material, unreal.MaterialFactoryNew())
+    mat = asset_tools.create_asset("M_ScenarioDirt", MAT_DIR, unreal.Material, unreal.MaterialFactoryNew())
 
     def noise(x, y, scale, levels):
         n = mel.create_material_expression(mat, unreal.MaterialExpressionNoise, x, y)
@@ -147,7 +147,7 @@ def color_material(color):
 
 
 def spawn_mesh(name, mesh_path, x, y, z_bottom, yaw_deg=0.0, movable=False):
-    """A static mesh with its pivot at its foot (e.g. the people in /Game/CTrack/People), unscaled."""
+    """A static mesh with its pivot at its foot (e.g. the people in /Game/Scenario/People), unscaled."""
     actor = actor_sub.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(x * M, y * M, z_bottom * M),
                                              unreal.Rotator(0, 0, yaw_deg))
     actor.rename(name)
@@ -159,7 +159,7 @@ def spawn_mesh(name, mesh_path, x, y, z_bottom, yaw_deg=0.0, movable=False):
         raise RuntimeError(f"{name}: no static mesh {mesh_path}")
     comp.set_static_mesh(mesh)
     actor.tags = [TAG, name]
-    actor.set_folder_path(f"CTrack/{name.split('_')[0]}")
+    actor.set_folder_path(f"Scenario/{name.split('_')[0]}")
     return actor
 
 
@@ -182,13 +182,13 @@ def spawn_shape(name, shape, size, color, x, y, z_bottom, yaw_deg=0.0, movable=F
         comp.set_collision_profile_name("NoCollision")
     actor.set_actor_scale3d(unreal.Vector(*size))
     actor.tags = [TAG, name]
-    actor.set_folder_path(f"CTrack/{name.split('_')[0]}")
+    actor.set_folder_path(f"Scenario/{name.split('_')[0]}")
     if actor.get_name() != name:
         unreal.log_warning(f"{name}: object name is '{actor.get_name()}' (rename refused)")
     return actor
 
 
-MESH_DIR = "/Game/CTrack/Meshes/" + MAP_PATH.rstrip("/").split("/")[-1]
+MESH_DIR = "/Game/Scenario/Meshes/" + MAP_PATH.rstrip("/").split("/")[-1]
 
 
 def import_glb(path, dest):
@@ -269,7 +269,7 @@ def place_mesh(m, layout_dir):
         comp.set_collision_profile_name("NoCollision")
     actor.set_actor_scale3d(unreal.Vector(sx, sy, 1))
     actor.tags = [TAG, m["name"]]
-    actor.set_folder_path("CTrack/Meshes")
+    actor.set_folder_path("Scenario/Meshes")
     return actor
 
 
@@ -303,7 +303,7 @@ def main():
         holder = a
         if sway:
             x, y = o["pos"]
-            base = actor_sub.spawn_actor_from_class(unreal.CTrackSwayActor, unreal.Vector(x * M, y * M, o.get("z", 0.0) * M))
+            base = actor_sub.spawn_actor_from_class(unreal.ScenarioSwayActor, unreal.Vector(x * M, y * M, o.get("z", 0.0) * M))
             base.rename(f"{o['name']}_Sway")
             base.set_actor_label(f"{o['name']}_Sway")
             base.set_editor_property("height", o["size"][2] * M)
@@ -311,7 +311,7 @@ def main():
             base.set_editor_property("frequency", sway.get("freq_hz", 1.0))
             base.set_editor_property("direction_deg", sway.get("direction_deg", 90.0))
             base.tags = [TAG, f"{o['name']}_Sway"]
-            base.set_folder_path(f"CTrack/{o['name'].split('_')[0]}")
+            base.set_folder_path(f"Scenario/{o['name'].split('_')[0]}")
             attach(a, base)
             holder = base
         arms = o.get("arms")
@@ -340,7 +340,7 @@ def main():
         root.set_actor_label(m["name"])
         root.static_mesh_component.set_mobility(unreal.ComponentMobility.MOVABLE)
         root.tags = [TAG, m["name"]]
-        root.set_folder_path(f"CTrack/{m['name'].split('_')[0]}")
+        root.set_folder_path(f"Scenario/{m['name'].split('_')[0]}")
         for p in m["parts"]:
             ox, oy, oz = p["offset"]
             if "unreal_mesh" in p:
@@ -362,7 +362,7 @@ def main():
     if not unreal.EditorLoadingAndSavingUtils.save_map(world, MAP_PATH):
         raise RuntimeError(f"failed to save {MAP_PATH}")
     names = sorted(a.get_name() for a in actor_sub.get_all_level_actors() if a.actor_has_tag(TAG))
-    unreal.log_warning(f"CTrack layout placed: {len(names)} actors: {', '.join(names)}")
+    unreal.log_warning(f"Scenario layout placed: {len(names)} actors: {', '.join(names)}")
 
 
 main()
